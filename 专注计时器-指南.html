@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focus for yourself · 操作指南</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#ffffff;--bg2:#f6f6f4;--bg3:#f0efe9;
+  --text:#1a1a1a;--text2:#6b6b6b;--text3:#9e9e9e;
+  --border:rgba(0,0,0,.12);--border2:rgba(0,0,0,.22);
+  --green-bg:#edf7ee;--green-text:#2d7a38;--green-border:rgba(45,122,56,.35);
+  --yellow-bg:#fdf6e3;--yellow-text:#856404;--yellow-border:rgba(133,100,4,.3);
+  --radius:10px;--radius-lg:14px;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#1c1c1e;--bg2:#2c2c2e;--bg3:#3a3a3c;
+    --text:#f0f0f0;--text2:#a0a0a0;--text3:#666;
+    --border:rgba(255,255,255,.12);--border2:rgba(255,255,255,.22);
+    --green-bg:rgba(45,122,56,.2);--green-text:#5ec96b;--green-border:rgba(94,201,107,.3);
+    --yellow-bg:rgba(133,100,4,.2);--yellow-text:#e3b84e;--yellow-border:rgba(227,184,78,.3);
+  }
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif;min-height:100vh;line-height:1.7}
+.wrap{max-width:580px;margin:0 auto;padding:2.5rem 1.25rem 4rem}
+.back{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--text3);text-decoration:none;margin-bottom:1.75rem;transition:color .12s}
+.back:hover{color:var(--text2)}
+h1{font-size:22px;font-weight:600;color:var(--text);margin-bottom:4px}
+.sub{font-size:13px;color:var(--text2)}
+hr{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
+h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin:2rem 0 .9rem}
+p{font-size:14px;color:var(--text2);margin-bottom:.75rem}
+.notice{font-size:13px;color:var(--yellow-text);background:var(--yellow-bg);border:1px solid var(--yellow-border);border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1.25rem;line-height:1.6}
+.steps{display:flex;flex-direction:column;gap:.6rem;margin-bottom:1rem}
+.step{display:flex;align-items:flex-start;gap:.9rem;background:var(--bg2);border-radius:var(--radius);padding:.85rem 1rem}
+.step-num{font-size:12px;font-weight:600;color:var(--text3);min-width:18px;padding-top:1px}
+.step-content{font-size:14px;color:var(--text)}
+.step-content .label{font-weight:500;margin-bottom:2px}
+.step-content .desc{font-size:13px;color:var(--text2)}
+.item-list{display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem}
+.item{display:flex;align-items:flex-start;gap:.75rem;padding:.7rem 1rem;border:1px solid var(--border);border-radius:var(--radius)}
+.item-dot{width:6px;height:6px;border-radius:50%;background:var(--text3);flex-shrink:0;margin-top:6px}
+.item-text{font-size:14px;color:var(--text2)}
+.item-text strong{color:var(--text);font-weight:500}
+.table-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg2);color:var(--text3);font-weight:500;text-align:left;padding:.6rem .9rem;border-bottom:1px solid var(--border)}
+td{padding:.6rem .9rem;color:var(--text2);border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+td:first-child{color:var(--text);font-weight:500;white-space:nowrap}
+.example{background:var(--bg2);border-radius:var(--radius);padding:.75rem 1rem;font-size:13px;color:var(--text2);margin-bottom:1rem}
+.example span{color:var(--text);font-weight:500}
+.footer{font-size:12px;color:var(--text3);text-align:center;margin-top:3rem}
+@media(max-width:480px){.wrap{padding:1.5rem .9rem 3rem}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a class="back" href="index.html">← 返回工具箱</a>
+
+  <h1>Focus for yourself</h1>
+  <span class="sub">操作指南</span>
+
+  <hr>
+
+  <div class="notice">
+    这是一个本地运行的 HTML 文件，无需安装、无需网络。记录仅保存在当次页面中，关闭或刷新页面后自动清空。整个网页的功能是基于我自己的需求与习惯，很多操作可能对你没有什么帮助，但我希望能做一点也对你有帮助的事，所以麻烦你使用并告知我。
+  </div>
+
+  <h2>快速上手</h2>
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-content"><div class="label">打开文件</div><div class="desc">点击工具箱链接，在浏览器中打开。</div></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-content"><div class="label">设置开始时间</div><div class="desc">页面顶部可手动填写开始时间，右侧自动显示结束时间（开始时间 + 30 分钟）。时间旁的刷新图标可将开始时间更新为当前时刻。</div></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-content"><div class="label">写下任务</div><div class="desc">在文本框中写本轮 30 分钟想完成的事，例如：写完公式（1）的三句推导。</div></div></div>
+    <div class="step"><span class="step-num">4</span><div class="step-content"><div class="label">开始专注</div><div class="desc">点击「开始专注 →」，计时器启动，圆环随时间推进。</div></div></div>
+    <div class="step"><span class="step-num">5</span><div class="step-content"><div class="label">30 分钟后反馈</div><div class="desc">时间到后自动进入反馈页，选择完成情况（见"反馈页"一节）。</div></div></div>
+    <div class="step"><span class="step-num">6</span><div class="step-content"><div class="label">开始下一轮</div><div class="desc">反馈后自动回到设置页，开始时间已自动填为上一轮结束时间。</div></div></div>
+  </div>
+
+  <hr>
+
+  <h2>计时中的操作</h2>
+  <div class="item-list">
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>暂停 / 继续</strong>　点击「暂停」按钮可随时暂停，再次点击继续计时。</div></div>
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>提前完成</strong>　任务提前完成时点击，进入提前完成流程（见下节）。</div></div>
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>时间到 → 手动跳转</strong>　效果等同于时间自然结束。</div></div>
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>切换页面或后台</strong>　倒计时仍然正常运行，回到页面时剩余时间自动更新为正确数值。</div></div>
+  </div>
+
+  <hr>
+
+  <h2>提前完成流程</h2>
+  <p>点击「提前完成」后进入确认页，填写实际完成时间（默认为当前时间，可修改），然后选择接下来的操作：</p>
+  <div class="item-list">
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>继续下一个任务</strong>　以实际完成时间为下一轮开始时间，回到设置页填写新任务。</div></div>
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>休息到时间段结束</strong>　进入休息倒计时（每轮独立，不累加）。</div></div>
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>直接结束今日</strong>　记录本轮，返回设置页，不开启新任务。</div></div>
+  </div>
+
+  <p style="font-size:13px;color:var(--text3)">休息时长计算方式：本轮原计划结束时间（开始 + 30 分钟）减去实际完成时间。</p>
+  <div class="example">示例　<span>16:00</span> 开始，应到 <span>16:30</span> 结束，<span>16:15</span> 提前完成 → 休息 <span>15 分钟</span></div>
+
+  <hr>
+
+  <h2>反馈页</h2>
+  <div class="item-list">
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>全部完成</strong>　记录为完成，下一轮输入框清空。</div></div>
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>没做完</strong>　拖动进度条选择完成百分比，点击「记录进度，继续下一轮 →」。下一轮输入框自动带入本轮任务内容，顶部有黄色提示，可直接编辑。</div></div>
+  </div>
+
+  <hr>
+
+  <h2>今日记录</h2>
+  <p>每轮结束后，设置页下方实时显示今日的可视化方块图：每行为一个事件，左侧为任务名称，右侧方格横向排列，一格代表 30 分钟，半格代表提前完成。同名任务跨轮时自动合并为一个事件。耗时最长的事件整行显示为暗红色。</p>
+  <p>重置记录：刷新页面即可清空所有当日记录，第二天打开也会自动清空。</p>
+
+  <hr>
+
+  <h2>导出每日记录</h2>
+  <p>每轮结束后，今日记录区域右上方出现两个导出按钮：</p>
+  <div class="item-list">
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>文字版</strong>　导出纯文字排版的 HTML 文件，以事件为主，显示时间段与完成状态，底部附汇总行。</div></div>
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>可视化版</strong>　导出带方格时间轴的 HTML 文件，含总事件数、完成率、专注时长三项数据。</div></div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>格式</th><th>HTML 文件，双击用浏览器打开，手机电脑均可查看</th></tr>
+      <tr><td>文件名</td><td>以日期命名，例：2026-06-26_专注记录_文字版.html</td></tr>
+      <tr><td>覆盖规则</td><td>同一天多次导出文件名相同，自动覆盖上一次</td></tr>
+      <tr><td>跨天</td><td>刷新页面即为新的一天，不会保留前一天记录</td></tr>
+      <tr><td>跨轮合并</td><td>同名任务自动合并为一个事件，时间段取起止时间</td></tr>
+    </table>
+  </div>
+
+  <div class="footer">Focus for yourself · 操作指南</div>
+</div>
+</body>
+</html>

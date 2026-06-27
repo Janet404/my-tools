@@ -24,12 +24,14 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 h1{font-size:22px;font-weight:600;color:var(--text);margin-bottom:4px}
 .sub{font-size:13px;color:var(--text2)}
 .section-title{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin:2rem 0 .75rem;display:block}
-.tool-card{display:flex;align-items:center;justify-content:space-between;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:.75rem;text-decoration:none;color:var(--text);transition:background .12s,border-color .12s}
+.tool-card{display:flex;align-items:center;justify-content:space-between;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:.4rem;text-decoration:none;color:var(--text);transition:background .12s,border-color .12s}
 .tool-card:hover{background:var(--bg2);border-color:var(--border2)}
 .tool-info{display:flex;flex-direction:column;gap:3px}
 .tool-name{font-size:15px;font-weight:500;color:var(--text)}
 .tool-desc{font-size:12px;color:var(--text3)}
 .tool-arrow{font-size:18px;color:var(--text3)}
+.guide-link{display:inline-block;font-size:12px;color:var(--text3);text-decoration:none;margin-bottom:1rem;padding:4px 0 4px 1.25rem;transition:color .12s}
+.guide-link:hover{color:var(--text2)}
 hr{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
 .footer{font-size:12px;color:var(--text3);text-align:center;margin-top:2.5rem}
 @media(max-width:480px){.wrap{padding:1.5rem .9rem 3rem}}
@@ -48,13 +50,14 @@ hr{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
 
   <a class="tool-card" href="专注计时器.html">
     <div class="tool-info">
-      <span class="tool-name">论文专注计时器</span>
+      <span class="tool-name">Focus for yourself</span>
       <span class="tool-desc">30 分钟专注 · 任务记录 · 可视化导出</span>
     </div>
     <span class="tool-arrow">→</span>
   </a>
+  <a class="guide-link" href="专注计时器-指南.html">↗ 查看操作指南</a>
 
-  <!-- 后续新增工具复制上面的 tool-card 即可 -->
+  <!-- 后续新增工具复制上面的 tool-card 和 guide-link 即可 -->
 
   <div class="footer">持续更新中</div>
 </div>
