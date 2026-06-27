@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的工具箱</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#ffffff;--bg2:#f6f6f4;--bg3:#f0efe9;
+  --text:#1a1a1a;--text2:#6b6b6b;--text3:#9e9e9e;
+  --border:rgba(0,0,0,.12);--border2:rgba(0,0,0,.22);
+  --radius:10px;--radius-lg:14px;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#1c1c1e;--bg2:#2c2c2e;--bg3:#3a3a3c;
+    --text:#f0f0f0;--text2:#a0a0a0;--text3:#666;
+    --border:rgba(255,255,255,.12);--border2:rgba(255,255,255,.22);
+  }
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif;min-height:100vh}
+.wrap{max-width:580px;margin:0 auto;padding:2.5rem 1.25rem 3rem}
+h1{font-size:22px;font-weight:600;color:var(--text);margin-bottom:4px}
+.sub{font-size:13px;color:var(--text2)}
+.section-title{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin:2rem 0 .75rem;display:block}
+.tool-card{display:flex;align-items:center;justify-content:space-between;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:.75rem;text-decoration:none;color:var(--text);transition:background .12s,border-color .12s}
+.tool-card:hover{background:var(--bg2);border-color:var(--border2)}
+.tool-info{display:flex;flex-direction:column;gap:3px}
+.tool-name{font-size:15px;font-weight:500;color:var(--text)}
+.tool-desc{font-size:12px;color:var(--text3)}
+.tool-arrow{font-size:18px;color:var(--text3)}
+hr{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
+.footer{font-size:12px;color:var(--text3);text-align:center;margin-top:2.5rem}
+@media(max-width:480px){.wrap{padding:1.5rem .9rem 3rem}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div style="margin-bottom:1.5rem">
+    <h1>我的工具箱</h1>
+    <span class="sub">一些自用的小工具</span>
+  </div>
+
+  <hr>
+
+  <span class="section-title">效率</span>
+
+  <a class="tool-card" href="专注计时器.html">
+    <div class="tool-info">
+      <span class="tool-name">论文专注计时器</span>
+      <span class="tool-desc">30 分钟专注 · 任务记录 · 可视化导出</span>
+    </div>
+    <span class="tool-arrow">→</span>
+  </a>
+
+  <!-- 后续新增工具复制上面的 tool-card 即可 -->
+
+  <div class="footer">持续更新中</div>
+</div>
+</body>
+</html>
