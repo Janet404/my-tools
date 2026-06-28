@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分叉 · 数学讨论流</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap');
+:root{
+  --paper:#F2F4F2;--card:#FBFCFB;--ink:#19221E;--ink-soft:#5C665F;
+  --line:#D9DFDA;--path:#34487A;--path-tint:#34487A14;--focus:#DD6A35;
+  --focus-tint:#DD6A3518;--stub:#A6AEA9;--ok:#3E7C5A;--warn:#C4860A;
+  --shadow:0 1px 2px rgba(25,34,30,.05),0 8px 28px rgba(25,34,30,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--paper);color:var(--ink);font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+button{font-family:inherit;cursor:pointer}
+::selection{background:var(--focus-tint)}
+#app{display:flex;flex-direction:column;height:100vh;max-height:100vh}
+
+/* header */
+header.bar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--card);flex:0 0 auto;flex-wrap:wrap;}
+.brand{display:flex;align-items:baseline;gap:9px;min-width:0}
+.brand .mark{font-weight:700;letter-spacing:-.02em;font-size:17px}
+.brand .mark b{color:var(--focus)}
+.brand .topic{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:28vw;}
+.spacer{flex:1}
+.stat{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-soft);white-space:nowrap}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 11px;font-size:13px;font-weight:500;transition:border-color .15s,background .15s;white-space:nowrap;}
+.btn:hover{border-color:var(--ink-soft)}
+.btn.accent{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn.accent:hover{background:#000}
+.btn:focus-visible,.node:focus-visible,textarea:focus-visible,.chip:focus-visible{outline:2px solid var(--path);outline-offset:2px;border-radius:8px;}
+
+/* model / effort bar */
+.modelbar{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.modelbar select{font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid var(--line);border-radius:7px;padding:5px 8px;background:var(--card);color:var(--ink);cursor:pointer;}
+.modelbar select:focus{outline:2px solid var(--path);outline-offset:2px}
+.effort-wrap{display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-soft);}
+.effort-wrap input[type=range]{width:72px;accent-color:var(--path);cursor:pointer;}
+.effort-lbl{min-width:22px;text-align:right;color:var(--path);font-weight:600}
+
+/* main split */
+main{display:flex;flex:1;min-height:0}
+.rail{flex:0 0 300px;max-width:40vw;border-right:1px solid var(--line);background:var(--card);overflow-y:auto;padding:12px 8px 40px;}
+.rail .rail-h{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.08em;padding:2px 8px 10px;display:flex;align-items:center;gap:7px;}
+.rail .rail-h .legend{display:flex;gap:9px;margin-left:auto}
+.lg{display:inline-flex;align-items:center;gap:3px}
+.lg i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.lg.focus i{background:var(--focus)}
+.lg.path i{background:var(--path)}
+.lg.unread i{background:var(--warn)}
+
+/* tree */
+.tree{list-style:none;margin:0;padding:0}
+.tree ul{list-style:none;margin:0;padding-left:18px;position:relative}
+.tree ul::before{content:"";position:absolute;left:7px;top:0;bottom:11px;border-left:1.5px solid var(--line);}
+.tree li{position:relative}
+.tree li > ul > li::before{content:"";position:absolute;left:-11px;top:14px;width:11px;border-top:1.5px solid var(--line);}
+.tree li.onpath > ul::before{border-color:var(--path)}
+.tree li.onpath::before{border-color:var(--path)!important}
+
+.node{display:flex;align-items:flex-start;gap:6px;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:8px;padding:5px 7px;margin:2px 0;color:var(--ink);line-height:1.35;transition:background .12s,border-color .12s;}
+.node:hover{background:var(--path-tint)}
+.node .dot{flex:0 0 auto;width:11px;height:11px;border-radius:50%;margin-top:3px;border:1.6px solid var(--path);background:transparent;}
+.node.answered .dot{background:transparent;border-color:var(--path)}
+.node.onpath .dot{background:var(--path);border-color:var(--path)}
+.node.stub .dot{border-style:dashed;border-color:var(--stub)}
+.node.err .dot{border-color:var(--focus);background:var(--focus)}
+.node.focus{background:var(--focus-tint);border-color:var(--focus)}
+.node.focus .dot{background:var(--focus);border-color:var(--focus);box-shadow:0 0 0 3px var(--focus-tint)}
+.node .lab{font-size:12.5px;flex:1;min-width:0;word-break:break-word}
+.node.stub .lab{color:var(--ink-soft);font-style:italic}
+/* unread dot */
+.node .unread-pip{width:7px;height:7px;border-radius:50%;background:var(--warn);flex-shrink:0;margin-top:4px;display:none;}
+.node.unread .unread-pip{display:block}
+
+/* content pane */
+.pane{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--paper)}
+.scroll{flex:1;overflow-y:auto;padding:20px clamp(14px,4vw,42px) 8px}
+.empty{max-width:560px;margin:8vh auto 0;text-align:center;color:var(--ink-soft);}
+.empty h2{font-size:22px;color:var(--ink);font-weight:600;margin:0 0 10px}
+.empty p{margin:0 0 6px}
+.empty .k{font-family:'JetBrains Mono',monospace;font-size:12px}
+
+.crumbs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-soft);margin-bottom:16px;max-width:760px;}
+.crumbs button{background:none;border:none;color:var(--ink-soft);padding:2px 4px;border-radius:5px;font:inherit;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.crumbs button:hover{color:var(--path);background:var(--path-tint)}
+.crumbs .sep{opacity:.5}
+.crumbs button.here{color:var(--focus)}
+
+/* node toolbar (unread toggle + output) */
+.node-toolbar{max-width:760px;margin:0 auto 10px;display:flex;gap:8px;align-items:center}
+.node-toolbar button{font-size:12px;padding:4px 10px;border-radius:6px}
+.unread-toggle{border:1px solid var(--warn);color:var(--warn);background:transparent;}
+.unread-toggle.marked{background:var(--warn);color:#fff;}
+.output-btn{border:1px solid var(--ok);color:var(--ok);background:transparent;}
+.output-btn:hover{background:var(--ok);color:#fff;}
+
+.card{max-width:760px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.q{padding:16px 20px;border-bottom:1px solid var(--line);background:#fff}
+.q .tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--path)}
+.q .quote{margin:8px 0 0;padding:8px 12px;border-left:3px solid var(--focus);background:var(--focus-tint);border-radius:0 8px 8px 0;font-size:13px;color:var(--ink-soft);font-family:'Newsreader',serif;font-style:italic;}
+.q .qtext{margin:7px 0 0;font-size:16px;font-weight:500;line-height:1.4}
+.a{padding:18px 20px;font-family:'Newsreader',Georgia,serif;font-size:16px;line-height:1.7;color:#222b27;}
+.a h1,.a h2,.a h3{font-family:'Space Grotesk',sans-serif;line-height:1.3;margin:1.3em 0 .5em}
+.a h1{font-size:20px}.a h2{font-size:18px}.a h3{font-size:16px}
+.a p{margin:.7em 0}
+.a ul,.a ol{margin:.6em 0;padding-left:1.4em}
+.a li{margin:.3em 0}
+.a code{font-family:'JetBrains Mono',monospace;font-size:.85em;background:var(--path-tint);padding:1px 5px;border-radius:5px}
+.a pre{background:#1d2521;color:#e9efe9;padding:12px 14px;border-radius:10px;overflow-x:auto}
+.a pre code{background:none;color:inherit}
+.a .katex-display{margin:.9em 0;overflow-x:auto;overflow-y:hidden;padding:2px 0}
+.a strong{font-weight:600}
+
+/* output card */
+.output-card{max-width:760px;margin:14px auto 0;background:#f0f7f3;border:1px solid #b0d4be;border-radius:14px;overflow:hidden}
+.output-card .out-head{padding:10px 18px;border-bottom:1px solid #b0d4be;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ok);text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:8px}
+.output-card .out-body{padding:16px 20px;font-family:'Newsreader',Georgia,serif;font-size:16px;line-height:1.7;color:#1a2e22;}
+
+/* round warning */
+.round-warn{max-width:760px;margin:12px auto 0;background:#fef8ec;border:1px solid #e8cc88;border-radius:10px;padding:10px 16px;font-size:13px;color:var(--warn);font-family:'Space Grotesk',sans-serif;display:flex;align-items:center;gap:8px}
+
+.thinking{display:flex;align-items:center;gap:10px;color:var(--ink-soft);font-family:'Space Grotesk',sans-serif;font-style:normal}
+.dots{display:inline-flex;gap:4px}
+.dots i{width:6px;height:6px;border-radius:50%;background:var(--path);animation:bnc 1s infinite ease-in-out}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes bnc{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-4px)}}
+.errbox{font-family:'Space Grotesk',sans-serif;font-style:normal;color:var(--ink);background:var(--focus-tint);border:1px solid var(--focus);border-radius:10px;padding:12px 14px}
+.errbox button{margin-top:8px}
+
+#selbtn{position:absolute;z-index:40;display:none;transform:translate(-50%,-130%);background:var(--ink);color:#fff;border:none;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:500;box-shadow:var(--shadow);}
+#selbtn::after{content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--ink);border-bottom:0}
+
+.below{max-width:760px;margin:14px auto 0}
+.row-h{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft);margin:14px 0 7px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:20px;padding:5px 12px;font-size:13px;color:var(--ink);max-width:100%;text-align:left;transition:border-color .12s,background .12s;}
+.chip:hover{border-color:var(--path);background:var(--path-tint)}
+.chip.child{border-style:solid}
+.chip.sug{border-style:dashed;color:var(--ink-soft)}
+.chip.sug::before{content:"＋ ";color:var(--path)}
+
+.composer{flex:0 0 auto;border-top:1px solid var(--line);background:var(--card);padding:10px clamp(14px,4vw,42px);}
+.composer .ctx{max-width:760px;margin:0 auto 6px;font-size:12px;color:var(--ink-soft);display:none;align-items:center;gap:8px}
+.composer .ctx.on{display:flex}
+.composer .ctx .clip{font-family:'Newsreader',serif;font-style:italic;background:var(--focus-tint);padding:2px 8px;border-radius:6px;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.composer .ctx button{background:none;border:none;color:var(--ink-soft);font-size:14px;cursor:pointer}
+.inwrap{max-width:760px;margin:0 auto;display:flex;gap:10px;align-items:flex-end}
+textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:12px;padding:11px 14px;font-family:'Space Grotesk',sans-serif;font-size:15px;line-height:1.45;background:#fff;color:var(--ink);max-height:160px;min-height:46px;}
+textarea::placeholder{color:var(--stub)}
+.sendwrap{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.send{border:none;background:var(--ink);color:#fff;border-radius:12px;width:46px;height:46px;font-size:18px;display:grid;place-items:center;}
+.send:hover{background:#000}
+.send:disabled{background:var(--stub);cursor:not-allowed}
+.hint{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--stub)}
+.where{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--path);max-width:760px;margin:4px auto 0;text-align:right}
+
+/* modals */
+.modal{position:fixed;inset:0;background:rgba(20,28,24,.45);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal.on{display:flex}
+.sheet{background:var(--card);border-radius:16px;box-shadow:var(--shadow);width:min(720px,100%);max-height:86vh;display:flex;flex-direction:column;overflow:hidden}
+.sheet header{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.sheet header b{font-size:15px}
+.sheet .body{padding:16px 18px;overflow-y:auto;flex:1}
+.sheet textarea{width:100%;min-height:46vh;max-height:60vh;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.55}
+.sheet footer{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
+
+.railtoggle{display:none}
+@media(max-width:760px){
+  .rail{position:absolute;z-index:30;inset:0 auto 0 0;width:84%;max-width:320px;transform:translateX(-102%);transition:transform .2s;box-shadow:var(--shadow)}
+  body.rail-open .rail{transform:translateX(0)}
+  .railtoggle{display:grid;place-items:center;width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--card)}
+  .brand .topic{max-width:40vw}
+  main{position:relative}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <button class="railtoggle" id="railtoggle" aria-label="切换树">☰</button>
+    <div class="brand">
+      <span class="mark">分<b>叉</b></span>
+      <span class="topic" id="topic">尚未开始</span>
+    </div>
+    <div class="modelbar">
+      <select id="modelSel" title="选择模型">
+        <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+        <option value="claude-opus-4-8">Opus 4.8</option>
+      </select>
+      <div class="effort-wrap">
+        <span>effort</span>
+        <input type="range" id="effortSlider" min="1" max="3" step="1" value="2" title="推理深度">
+        <span class="effort-lbl" id="effortLbl">中</span>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <span class="stat" id="stat"></span>
+    <button class="btn" id="newBtn">＋ 新讨论</button>
+    <button class="btn" id="importBtn">导入</button>
+    <button class="btn accent" id="exportBtn">导出</button>
+  </header>
+
+  <main>
+    <nav class="rail" id="rail" aria-label="讨论流树">
+      <div class="rail-h">
+        路径树
+        <span class="legend">
+          <span class="lg focus"><i></i>当前</span>
+          <span class="lg path"><i></i>路径</span>
+          <span class="lg unread"><i></i>待读</span>
+        </span>
+      </div>
+      <ul class="tree" id="tree"></ul>
+    </nav>
+
+    <section class="pane">
+      <div class="scroll" id="scroll">
+        <div id="crumbs" class="crumbs"></div>
+        <div id="content"></div>
+      </div>
+      <div class="composer">
+        <div class="ctx" id="ctx">
+          针对选中：<span class="clip" id="ctxClip"></span>
+          <button id="ctxClear" aria-label="取消引用">✕</button>
+        </div>
+        <div class="inwrap">
+          <textarea id="input" rows="1" placeholder="输入数学问题…（Enter 发送，Shift+Enter 换行）"></textarea>
+          <div class="sendwrap">
+            <button class="send" id="send" aria-label="发送">↑</button>
+            <span class="hint">Enter</span>
+          </div>
+        </div>
+        <div class="where" id="where"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<button id="selbtn">针对这句追问</button>
+
+<!-- export modal -->
+<div class="modal" id="modal">
+  <div class="sheet">
+    <header>
+      <b>导出 · 完整讨论流</b>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-soft)">深度优先 · 过滤口语句</span>
+      <div style="flex:1"></div>
+      <button class="btn" id="modalClose">关闭</button>
+    </header>
+    <div class="body"><textarea id="exportText" readonly></textarea></div>
+    <footer>
+      <button class="btn" id="copyMd">复制 Markdown</button>
+      <button class="btn accent" id="downloadMd">下载 .md</button>
+    </footer>
+  </div>
+</div>
+
+<!-- import modal -->
+<div class="modal" id="importModal">
+  <div class="sheet">
+    <header>
+      <b>导入历史对话</b>
+      <div style="flex:1"></div>
+      <button class="btn" id="importModalClose">关闭</button>
+    </header>
+    <div class="body">
+      <div id="importMsg" style="font-size:13px;color:var(--ink-soft);margin-bottom:12px;font-family:'JetBrains Mono',monospace;min-height:20px"></div>
+      <textarea id="importText" placeholder="把生成的 JSON 粘贴进来，然后点导入"></textarea>
+    </div>
+    <footer>
+      <button class="btn" id="importClear">清空</button>
+      <button class="btn accent" id="importDo">导入</button>
+    </footer>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script>
+/* ===== state ===== */
+let state = { nodes:{}, rootId:null, focusId:null, title:"", id:"d"+Date.now() };
+let pendingQuote = null;
+let busy = false;
+let totalRounds = 0;
+const ROUND_WARN = 8; // suggest output after this many rounds
+const $ = id => document.getElementById(id);
+const uid = () => "n"+Math.random().toString(36).slice(2,9);
+
+/* ===== effort ===== */
+const EFFORT_LABELS = {1:"低",2:"中",3:"高"};
+const EFFORT_TOKENS = {1:3000,2:8000,3:16000};
+$("effortSlider").oninput = ()=>{
+  $("effortLbl").textContent = EFFORT_LABELS[$("effortSlider").value];
+};
+
+/* ===== persistence ===== */
+const STORE = (typeof window!=="undefined"&&window.storage&&typeof window.storage.set==="function")?window.storage:null;
+async function save(){
+  if(!STORE) return;
+  try{ await STORE.set("flow:"+state.id, JSON.stringify({state,totalRounds}), false); }catch(e){}
+}
+async function loadLast(){
+  if(!STORE) return false;
+  try{
+    const l = await STORE.list("flow:", false);
+    if(l&&l.keys&&l.keys.length){
+      const k = l.keys.sort().slice(-1)[0];
+      const r = await STORE.get(k, false);
+      if(r){ const d=JSON.parse(r.value); state=d.state; totalRounds=d.totalRounds||0; return true; }
+    }
+  }catch(e){}
+  return false;
+}
+
+/* ===== math + markdown ===== */
+function renderRich(el, text){
+  if(!text){ el.innerHTML=""; return; }
+  const store=[];
+  let t = text
+    .replace(/\$\$([\s\S]+?)\$\$/g, m=>{ store.push(m); return "@@M"+(store.length-1)+"@@"; })
+    .replace(/\$([^\$\n]+?)\$/g,     m=>{ store.push(m); return "@@M"+(store.length-1)+"@@"; });
+  let html = window.marked ? marked.parse(t) : t.replace(/\n/g,"<br>");
+  html = html.replace(/@@M(\d+)@@/g,(_,i)=>store[+i]);
+  el.innerHTML = html;
+  if(window.renderMathInElement){
+    try{ renderMathInElement(el,{delimiters:[{left:"$$",right:"$$",display:true},{left:"$",right:"$",display:false}],throwOnError:false}); }catch(e){}
+  }
+}
+
+/* ===== system prompts ===== */
+const SYS_MAIN = `你是一位严谨、耐心的数学导师，服务于一位思维高度发散、最看重信息完整性的博士研究生。
+
+【回答铁律】
+- 绝不为了简洁而压缩或省略推导。完整呈现每一步、每步的依据、用到的定义与定理，必要时给出直觉解释。宁可长，不可缺。
+- 不使用"先搭好舞台""值得注意的是""好，这个问题问到了点子上"等比喻性、评价性、口语性过渡句。直接进入数学内容。
+- 所有数学用 KaTeX 语法：行内用 $...$，独立公式用 $$...$$。
+- 可用 Markdown 标题、列表、加粗组织结构。
+- 语言与用户提问一致（中文提问就用中文作答）。
+
+【节点标题生成】
+完整回答之后，另起一行输出标记 ===TITLE=== ，其后一行给出本问题的精简标题：去掉"教授""简单总结""我不明白"等口语前缀，只保留核心数学内容，不限字数。
+
+【追问建议】
+标题之后，另起一行输出标记 ===FOLLOWUPS=== ，其后放一个 JSON 数组，含 2~3 个可继续深挖的追问（每个不超过 20 字），仅数组本身，不要解释。`;
+
+const SYS_OUTPUT = `你是一位严谨的数学写作助手，服务于一位正在撰写中文学术论文的博士研究生。
+
+根据提供的讨论内容，生成一段论文式总结输出。
+
+【输出规则——严格遵守】
+1. 语言：规范中文学术书面语，不使用口语表达。
+2. 数学：保留完整的公式推导、定义、定理陈述及举例；所有数学用 KaTeX 语法（行内 $...$，独立 $$...$$）。
+3. 立场：只陈述数学事实，不作评价、不作判定。禁止出现"可以看到""值得注意""显然""容易验证"等评价性措辞。
+4. 结构：保留定义→定理→推导→举例的逻辑顺序，不重组。
+5. 过滤：去掉所有比喻性解释、口语过渡句、教学性引导语（如"我们先来看""想象一下"）。
+6. 长度：以能完整覆盖讨论内容的数学实质为准，不人为压缩。
+
+直接输出论文段落，不加任何前言或说明。`;
+
+const SYS_EXPORT = `你是一位严谨的数学文档整理助手。
+
+将提供的讨论流整理成干净的学术文档。
+
+【过滤规则——严格遵守】
+保留：定义、定理陈述、完整公式推导、数学举例、逻辑论证链条。
+删除：所有教学性引导句（"先来看""想象一下""我们把舞台搭清楚"）、评价句（"问到了点子上""理解到位"）、比喻性解释、口语过渡语、重复性总结。
+数学格式：保留所有 KaTeX 语法不变。
+结构：按原有层级输出，不重组，不压缩数学内容。
+
+直接输出整理后的文档，不加说明。`;
+
+/* ===== API ===== */
+function pathToRoot(id){ const p=[]; let c=id; while(c){ p.unshift(state.nodes[c]); c=state.nodes[c]?.parentId; } return p; }
+
+async function callClaude(node, systemOverride, userMsg){
+  const model = $("modelSel").value;
+  const effort = parseInt($("effortSlider").value);
+  const budgetTokens = EFFORT_TOKENS[effort];
+  const sys = systemOverride || SYS_MAIN;
+
+  let messages;
+  if(userMsg){
+    messages = [{role:"user", content: userMsg}];
+  } else {
+    const anc = pathToRoot(node.parentId).filter(n=>n&&n.a);
+    messages = [];
+    anc.forEach(n=>{
+      messages.push({role:"user", content:(n.quote?"（针对你上一条回答中的这句话：「"+n.quote+"」）\n":"")+n.q});
+      messages.push({role:"assistant", content:n.a});
+    });
+    const uc = (node.quote?"（针对你上一条回答中的这句话：「"+node.quote+"」）\n":"")+node.q;
+    messages.push({role:"user", content:uc});
+  }
+
+  const body = {
+    model, max_tokens: 8000, system: sys, messages,
+    thinking: { type:"enabled", budget_tokens: budgetTokens }
+  };
+
+  const res = await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(body)
+  });
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  const data = await res.json();
+  // only take text blocks, skip thinking blocks
+  const raw = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").trim();
+  return raw;
+}
+
+async function callMainClaude(node){
+  const raw = await callClaude(node);
+  let answer=raw, title="", followups=[];
+
+  const ti = raw.indexOf("===TITLE===");
+  const fi = raw.indexOf("===FOLLOWUPS===");
+
+  if(ti>=0){
+    answer = raw.slice(0,ti).trim();
+    const afterTitle = raw.slice(ti+11);
+    const nextMarker = afterTitle.indexOf("===");
+    const titleBlock = nextMarker>=0 ? afterTitle.slice(0,nextMarker) : (fi>=0?"":afterTitle);
+    title = titleBlock.trim().replace(/^#+\s*/,"");
+  }
+  if(fi>=0){
+    if(ti<0) answer = raw.slice(0,fi).trim();
+    const tail = raw.slice(fi+15).trim();
+    try{
+      const arr = JSON.parse(tail.slice(tail.indexOf("["),tail.lastIndexOf("]")+1));
+      if(Array.isArray(arr)) followups = arr.filter(x=>typeof x==="string").slice(0,3);
+    }catch(e){}
+  }
+  return {answer, title, followups};
+}
+
+/* ===== ask ===== */
+async function ask(text, quote){
+  if(busy||!text.trim()) return;
+  const parent = state.focusId;
+  const node = { id:uid(), parentId:parent, q:text.trim(), quote:quote||null,
+    a:"", title:"", followups:[], status:"loading", unread:false, output:null };
+  state.nodes[node.id] = node;
+  if(parent){ state.nodes[parent].children = state.nodes[parent].children||[]; state.nodes[parent].children.push(node.id); }
+  if(!state.rootId){ state.rootId=node.id; state.title=text.trim().slice(0,60); }
+  state.focusId = node.id;
+  pendingQuote = null;
+  busy = true; totalRounds++;
+  render();
+  try{
+    const {answer,title,followups} = await callMainClaude(node);
+    node.a = answer||"(没有返回内容)"; node.title=title; node.followups=followups; node.status="answered";
+  }catch(e){ node.status="error"; node.err=e.message; }
+  busy=false; render(); save();
+}
+
+/* ===== output (per node) ===== */
+async function generateOutput(nodeId){
+  const n = state.nodes[nodeId]; if(!n||!n.a) return;
+  n.outputLoading = true; render();
+  const path = pathToRoot(nodeId);
+  let context = path.map((nd,i)=>`【问题${i+1}】${nd.q}\n【回答${i+1}】${nd.a}`).join("\n\n---\n\n");
+  try{
+    const result = await callClaude(null, SYS_OUTPUT, "以下是一段数学讨论，请按规则生成论文式总结：\n\n"+context);
+    n.output = result; n.outputLoading = false;
+  }catch(e){ n.output="（生成失败："+e.message+"）"; n.outputLoading=false; }
+  render(); save();
+}
+
+/* ===== export with filter ===== */
+async function buildExport(){
+  if(!state.rootId) return "（还没有任何讨论）";
+  let raw = "# 数学讨论流："+(state.title||"未命名")+"\n\n";
+  const walk=(id,depth)=>{
+    const n=state.nodes[id]; if(!n) return;
+    const h="#".repeat(Math.min(depth+1,6));
+    raw += `${h} ${n.title||n.q}\n\n`;
+    if(n.quote) raw += `*（针对：「${n.quote}」）*\n\n`;
+    raw += (n.a||"（未作答）")+"\n\n";
+    (n.children||[]).forEach(k=>walk(k,depth+1));
+  };
+  walk(state.rootId,1);
+  // call export filter
+  try{
+    const filtered = await callClaude(null, SYS_EXPORT, "请整理以下讨论流文档：\n\n"+raw);
+    return filtered;
+  }catch(e){ return raw+"<!-- 过滤失败，输出原文 -->"; }
+}
+
+/* ===== tree label ===== */
+function shortLabel(n){
+  if(n.title) return n.title;
+  const base = n.q.replace(/\s+/g," ").trim();
+  return base.length>44 ? base.slice(0,44)+"…" : base;
+}
+
+/* ===== tree render ===== */
+function buildTree(id, onPathSet){
+  const n=state.nodes[id]; if(!n) return document.createTextNode("");
+  const li=document.createElement("li");
+  const onpath=onPathSet.has(id);
+  if(onpath) li.className="onpath";
+  const b=document.createElement("button");
+  b.className="node "+(n.id===state.focusId?"focus ":"")+(onpath?"onpath ":"")
+    +(n.status==="error"?"err ":n.status==="answered"?"answered ":"")
+    +(n.unread?"unread ":"");
+  b.setAttribute("role","treeitem");
+  b.onclick=()=>{ state.focusId=n.id; document.body.classList.remove("rail-open"); render(); };
+  b.innerHTML=`<span class="dot"></span><span class="lab">${escapeHtml(shortLabel(n))}</span><span class="unread-pip"></span>`;
+  li.appendChild(b);
+  const kids=n.children||[];
+  if(kids.length){ const ul=document.createElement("ul"); kids.forEach(k=>ul.appendChild(buildTree(k,onPathSet))); li.appendChild(ul); }
+  return li;
+}
+function renderTree(){
+  const tree=$("tree"); tree.innerHTML="";
+  if(!state.rootId) return;
+  const onPath=new Set(pathToRoot(state.focusId).map(n=>n.id));
+  tree.appendChild(buildTree(state.rootId,onPath));
+}
+
+/* ===== crumbs ===== */
+function renderCrumbs(){
+  const c=$("crumbs"); c.innerHTML="";
+  if(!state.focusId) return;
+  pathToRoot(state.focusId).forEach((n,i)=>{
+    if(i){const s=document.createElement("span");s.className="sep";s.textContent="›";c.appendChild(s);}
+    const b=document.createElement("button");
+    b.textContent=shortLabel(n);
+    if(n.id===state.focusId) b.className="here";
+    b.onclick=()=>{ state.focusId=n.id; render(); };
+    c.appendChild(b);
+  });
+}
+
+/* ===== content ===== */
+function renderContent(){
+  const wrap=$("content"); wrap.innerHTML="";
+  if(!state.focusId){
+    wrap.innerHTML=`<div class="empty"><h2>一条空白的讨论流</h2><p>输入第一个数学问题，开始往下钻。</p><p>每次提问接到<b>当前所在节点</b>下面，自动长出分支。</p><p class="k">想换路？点左边树上任意节点，再问就从那里分叉。</p></div>`;
+    return;
+  }
+  const n=state.nodes[state.focusId];
+
+  // round warning
+  if(totalRounds>=ROUND_WARN && n.status==="answered"){
+    const w=document.createElement("div"); w.className="round-warn";
+    w.innerHTML=`⏱ 已讨论 ${totalRounds} 轮，可以考虑点「生成论文输出」收阶段性成果了，之后仍可继续提问。`;
+    wrap.appendChild(w);
+  }
+
+  // node toolbar
+  const tb=document.createElement("div"); tb.className="node-toolbar";
+  if(n.status==="answered"){
+    const ut=document.createElement("button");
+    ut.className="btn unread-toggle"+(n.unread?" marked":"");
+    ut.textContent=n.unread?"● 待读中（点取消）":"○ 标为待读";
+    ut.onclick=()=>{ n.unread=!n.unread; render(); save(); };
+    tb.appendChild(ut);
+
+    const ob=document.createElement("button");
+    ob.className="btn output-btn";
+    ob.textContent=n.outputLoading?"生成中…":"生成论文输出";
+    ob.disabled=!!n.outputLoading;
+    ob.onclick=()=>generateOutput(n.id);
+    tb.appendChild(ob);
+  }
+  wrap.appendChild(tb);
+
+  // main card
+  const card=document.createElement("div"); card.className="card";
+  let qHtml=`<div class="q"><div class="tag">提问</div>`;
+  if(n.quote) qHtml+=`<div class="quote">「${escapeHtml(n.quote)}」</div>`;
+  qHtml+=`<div class="qtext">${escapeHtml(n.q)}</div></div>`;
+  const a=document.createElement("div"); a.className="a";
+  card.innerHTML=qHtml; card.appendChild(a); wrap.appendChild(card);
+
+  if(n.status==="loading"){
+    a.innerHTML=`<div class="thinking">推导中（Extended Thinking）<span class="dots"><i></i><i></i><i></i></span></div>`;
+  } else if(n.status==="error"){
+    a.innerHTML=`<div class="errbox">这一步没答上来（${escapeHtml(n.err||"网络或接口问题")}）。<br><button class="btn" id="retry">重试</button></div>`;
+    setTimeout(()=>{ const r=$("retry"); if(r) r.onclick=()=>retry(n.id); },0);
+  } else {
+    renderRich(a, n.a);
+  }
+
+  // output card
+  if(n.output){
+    const oc=document.createElement("div"); oc.className="output-card";
+    oc.innerHTML=`<div class="out-head">📄 论文输出 · 当前分支</div>`;
+    const ob=document.createElement("div"); ob.className="out-body";
+    renderRich(ob, n.output);
+    oc.appendChild(ob); wrap.appendChild(oc);
+  }
+
+  // children + followups
+  const below=document.createElement("div"); below.className="below";
+  const kids=(n.children||[]).map(k=>state.nodes[k]);
+  if(kids.length){
+    below.innerHTML+=`<div class="row-h">已展开的追问（${kids.length}）</div>`;
+    const cw=document.createElement("div"); cw.className="chips";
+    kids.forEach(k=>{ const ch=document.createElement("button"); ch.className="chip child"+(k.unread?" unread":""); ch.textContent=shortLabel(k); ch.onclick=()=>{ state.focusId=k.id; render(); }; cw.appendChild(ch); });
+    below.appendChild(cw);
+  }
+  if(n.status==="answered"&&n.followups&&n.followups.length){
+    const h=document.createElement("div"); h.className="row-h"; h.textContent="可以接着挖（点一下从这里分叉）";
+    below.appendChild(h);
+    const cw=document.createElement("div"); cw.className="chips";
+    n.followups.forEach(f=>{ const ch=document.createElement("button"); ch.className="chip sug"; ch.textContent=f; ch.onclick=()=>{ state.focusId=n.id; ask(f,null); }; cw.appendChild(ch); });
+    below.appendChild(cw);
+  }
+  wrap.appendChild(below);
+}
+
+function retry(id){
+  const n=state.nodes[id]; if(!n) return;
+  n.status="loading"; n.err=null; busy=true; render();
+  callMainClaude(n).then(({answer,title,followups})=>{ n.a=answer; n.title=title; n.followups=followups; n.status="answered"; })
+    .catch(e=>{ n.status="error"; n.err=e.message; })
+    .finally(()=>{ busy=false; render(); save(); });
+}
+
+function renderWhere(){
+  const w=$("where");
+  if(!state.focusId){ w.textContent=""; return; }
+  w.textContent="↳ 新提问将接到："+shortLabel(state.nodes[state.focusId]);
+}
+
+function render(){
+  renderTree(); renderCrumbs(); renderContent(); renderWhere();
+  $("topic").textContent=state.title||"尚未开始";
+  const count=Object.keys(state.nodes).length;
+  const depth=state.focusId?pathToRoot(state.focusId).length:0;
+  $("stat").textContent=count?(count+" 节点 · 深度 "+depth):"";
+  $("send").disabled=busy;
+  $("scroll").scrollTop=0;
+}
+
+/* ===== export ===== */
+async function doExport(){
+  $("exportText").value="正在过滤整理，请稍候…";
+  $("modal").classList.add("on");
+  const result = await buildExport();
+  $("exportText").value = result;
+}
+
+/* ===== helpers ===== */
+function escapeHtml(s){ return (s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+function autoGrow(t){ t.style.height="auto"; t.style.height=Math.min(t.scrollHeight,160)+"px"; }
+
+/* ===== events ===== */
+function send(){
+  const t=$("input"); const v=t.value;
+  if(!v.trim()||busy) return;
+  ask(v, pendingQuote);
+  t.value=""; autoGrow(t); $("ctx").classList.remove("on");
+}
+$("send").onclick=send;
+$("input").addEventListener("input",e=>autoGrow(e.target));
+$("input").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();} });
+$("newBtn").onclick=()=>{ state={nodes:{},rootId:null,focusId:null,title:"",id:"d"+Date.now()}; totalRounds=0; pendingQuote=null; $("ctx").classList.remove("on"); render(); };
+$("railtoggle").onclick=()=>document.body.classList.toggle("rail-open");
+$("ctxClear").onclick=()=>{ pendingQuote=null; $("ctx").classList.remove("on"); };
+
+$("exportBtn").onclick=doExport;
+$("modalClose").onclick=()=>$("modal").classList.remove("on");
+$("modal").addEventListener("click",e=>{ if(e.target===$("modal")) $("modal").classList.remove("on"); });
+$("copyMd").onclick=()=>{ const ta=$("exportText"); ta.select(); navigator.clipboard?.writeText(ta.value).then(()=>{ $("copyMd").textContent="已复制 ✓"; setTimeout(()=>$("copyMd").textContent="复制 Markdown",1400); }).catch(()=>{}); };
+$("downloadMd").onclick=()=>{ const blob=new Blob([$("exportText").value],{type:"text/markdown"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=(state.title||"讨论流").replace(/[\\/:*?"<>|]/g,"_").slice(0,40)+".md"; a.click(); URL.revokeObjectURL(url); };
+
+$("importBtn").onclick=()=>{ $("importMsg").textContent=""; $("importModal").classList.add("on"); };
+$("importModalClose").onclick=()=>$("importModal").classList.remove("on");
+$("importModal").addEventListener("click",e=>{ if(e.target===$("importModal")) $("importModal").classList.remove("on"); });
+$("importClear").onclick=()=>{ $("importText").value=""; $("importMsg").textContent=""; };
+$("importDo").onclick=()=>{
+  const raw=$("importText").value.trim();
+  if(!raw){ $("importMsg").textContent="⚠ 请先粘贴 JSON"; return; }
+  try{
+    const imported=JSON.parse(raw);
+    if(!imported.nodes||!imported.rootId) throw new Error("格式不对，缺少 nodes 或 rootId");
+    imported.id="d"+Date.now(); state=imported; state.focusId=state.rootId;
+    $("importMsg").textContent="✓ 导入成功，共 "+Object.keys(state.nodes).length+" 个节点";
+    $("importModal").classList.remove("on"); render(); save();
+  }catch(e){ $("importMsg").textContent="✗ "+e.message; }
+};
+
+/* selection → ask */
+const selbtn=$("selbtn");
+document.getElementById("scroll").addEventListener("mouseup",()=>{
+  setTimeout(()=>{
+    const sel=window.getSelection(); const txt=sel?sel.toString().trim():"";
+    const inAnswer=sel.anchorNode&&$("content").contains(sel.anchorNode);
+    if(txt.length>3&&inAnswer){
+      const r=sel.getRangeAt(0).getBoundingClientRect();
+      selbtn.style.left=(r.left+r.width/2)+"px";
+      selbtn.style.top=(r.top+window.scrollY)+"px";
+      selbtn.style.display="block";
+      selbtn.dataset.q=txt.slice(0,160);
+    } else { selbtn.style.display="none"; }
+  },10);
+});
+selbtn.onclick=()=>{ pendingQuote=selbtn.dataset.q; $("ctxClip").textContent=pendingQuote; $("ctx").classList.add("on"); selbtn.style.display="none"; window.getSelection().removeAllRanges(); $("input").focus(); };
+document.addEventListener("mousedown",e=>{ if(e.target!==selbtn) selbtn.style.display="none"; });
+
+/* boot */
+(async function(){ await loadLast(); render(); $("input").focus(); })();
+</script>
+</body>
+</html>
