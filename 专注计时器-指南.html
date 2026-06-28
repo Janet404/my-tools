@@ -74,10 +74,11 @@ td:first-child{color:var(--text);font-weight:500;white-space:nowrap}
   <div class="steps">
     <div class="step"><span class="step-num">1</span><div class="step-content"><div class="label">打开文件</div><div class="desc">点击工具箱链接，在浏览器中打开。</div></div></div>
     <div class="step"><span class="step-num">2</span><div class="step-content"><div class="label">设置开始时间</div><div class="desc">页面顶部可手动填写开始时间，右侧自动显示结束时间（开始时间 + 30 分钟）。时间旁的刷新图标可将开始时间更新为当前时刻。</div></div></div>
-    <div class="step"><span class="step-num">3</span><div class="step-content"><div class="label">写下任务</div><div class="desc">在文本框中写本轮 30 分钟想完成的事，例如：写完公式（1）的三句推导。</div></div></div>
-    <div class="step"><span class="step-num">4</span><div class="step-content"><div class="label">开始专注</div><div class="desc">点击「开始专注 →」，计时器启动，圆环随时间推进。</div></div></div>
-    <div class="step"><span class="step-num">5</span><div class="step-content"><div class="label">30 分钟后反馈</div><div class="desc">时间到后自动进入反馈页，选择完成情况（见"反馈页"一节）。</div></div></div>
-    <div class="step"><span class="step-num">6</span><div class="step-content"><div class="label">开始下一轮</div><div class="desc">反馈后自动回到设置页，开始时间已自动填为上一轮结束时间。</div></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-content"><div class="label">选择模式</div><div class="desc">页面顶部有两个选项卡：<strong>我有计划</strong>——直接写下本轮任务开始专注；<strong>懒蛋人类</strong>——告诉 AI 你想做什么，AI 帮你拆解成任务列表（见"懒蛋人类模式"一节）。</div></div></div>
+    <div class="step"><span class="step-num">4</span><div class="step-content"><div class="label">写下任务</div><div class="desc">在文本框中写本轮 30 分钟想完成的事，例如：写完公式（1）的三句推导。</div></div></div>
+    <div class="step"><span class="step-num">5</span><div class="step-content"><div class="label">开始专注</div><div class="desc">点击「开始专注 →」，计时器启动，圆环随时间推进。</div></div></div>
+    <div class="step"><span class="step-num">6</span><div class="step-content"><div class="label">30 分钟后反馈</div><div class="desc">时间到后自动进入反馈页，选择完成情况（见"反馈页"一节）。</div></div></div>
+    <div class="step"><span class="step-num">7</span><div class="step-content"><div class="label">开始下一轮</div><div class="desc">反馈后自动回到设置页，开始时间已自动填为上一轮结束时间。</div></div></div>
   </div>
 
   <hr>
@@ -134,6 +135,24 @@ td:first-child{color:var(--text);font-weight:500;white-space:nowrap}
       <tr><td>跨天</td><td>刷新页面即为新的一天，不会保留前一天记录</td></tr>
       <tr><td>跨轮合并</td><td>同名任务自动合并为一个事件，时间段取起止时间</td></tr>
     </table>
+  </div>
+
+  <hr>
+
+  <h2>懒蛋人类模式（AI 任务规划）</h2>
+  <p>点击页面顶部「懒蛋人类」选项卡，进入 AI 辅助规划模式。</p>
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-content"><div class="label">输入今天想做什么</div><div class="desc">随便说，说具体一点更好拆。例如：我要把论文第三章引言写完。</div></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-content"><div class="label">点击「让AI来拆 ✦」</div><div class="desc">AI 判断信息是否足够。够 → 直接给出任务列表；不够 → 追问 1-2 个问题，回答后再拆。</div></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-content"><div class="label">查看任务列表</div><div class="desc">拆解结果显示在可折叠的「待办任务」面板中，点击任意任务可将其填入输入框，自行修改后开始。</div></div></div>
+    <div class="step"><span class="step-num">4</span><div class="step-content"><div class="label">开始专注</div><div class="desc">点击「开始专注 →」启动计时，完成后在反馈页选择「全部完成」，任务自动标记删除线，下一个任务自动填入。</div></div></div>
+  </div>
+
+  <div class="item-list">
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>手动切换任务</strong>　点击列表中任意任务可随时切换，不影响删除线状态。</div></div>
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>继续追问细化</strong>　拆完后可在输入框继续说，例如「把五个论点依次拆开逐个起草」，AI 会重新输出更细的任务列表。</div></div>
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>第二天接续进度</strong>　直接告诉 AI 昨天做到哪里，例如「昨天写到引言第二段，今天接着写」，AI 会从断点继续拆。</div></div>
+    <div class="item"><div class="item-dot"></div><div class="item-text"><strong>无需注册或填写 Key</strong>　AI 功能已内置，直接使用即可。</div></div>
   </div>
 
   <div class="footer">Focus for yourself · 操作指南</div>

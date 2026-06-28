@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>论文专注计时器</title>
+<title>专注计时器</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -143,27 +143,72 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     <h1>本轮任务</h1><span class="sub" style="margin-left:8px">设定接下来30分钟要完成什么</span>
   </div>
 
+  <!-- 选项卡 -->
+  <div style="display:flex;gap:6px;margin-bottom:1rem">
+    <button id="tabPlan" onclick="switchTab('plan')" style="flex:1;padding:8px;font-size:13px;font-weight:500;border-radius:var(--radius);border:1px solid var(--border2);background:var(--text);color:var(--bg);cursor:pointer">我有计划</button>
+    <button id="tabAI" onclick="switchTab('ai')" style="flex:1;padding:8px;font-size:13px;font-weight:500;border-radius:var(--radius);border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer">懒蛋人类</button>
+  </div>
+
   <div class="card">
-    <div id="carryNotice" class="notice" style="display:none">
-      <i class="ti ti-arrow-right" style="font-size:13px;flex-shrink:0"></i>
-      <span>上一轮未完成，已自动带入——可直接编辑</span>
-    </div>
-    <div class="time-row">
-      <div class="time-pill">
-        <label>开始</label>
-        <input type="time" id="startTimeInput" onchange="updateEndTime()">
-        <button onclick="resetToNow()" title="刷新为当前时间" style="background:none;border:none;padding:0 0 0 4px;cursor:pointer;color:var(--text3);display:flex;align-items:center;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">
-          <i class="ti ti-refresh" style="font-size:15px"></i>
-        </button>
+    <!-- 我有计划模式 -->
+    <div id="modePlan">
+      <div id="carryNotice" class="notice" style="display:none">
+        <i class="ti ti-arrow-right" style="font-size:13px;flex-shrink:0"></i>
+        <span>上一轮未完成，已自动带入——可直接编辑</span>
       </div>
-      <span style="font-size:13px;color:var(--text3)">→</span>
-      <div class="end-badge" id="endTimeBadge">30 分钟后</div>
+      <div class="time-row">
+        <div class="time-pill">
+          <label>开始</label>
+          <input type="time" id="startTimeInput" onchange="updateEndTime()">
+          <button onclick="resetToNow()" title="刷新为当前时间" style="background:none;border:none;padding:0 0 0 4px;cursor:pointer;color:var(--text3);display:flex;align-items:center;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">
+            <i class="ti ti-refresh" style="font-size:15px"></i>
+          </button>
+        </div>
+        <span style="font-size:13px;color:var(--text3)">→</span>
+        <div class="end-badge" id="endTimeBadge">30 分钟后</div>
+      </div>
+      <span class="label-xs">我想在30分钟内完成…</span>
+      <textarea id="taskInput" placeholder="例：写完第三章公式（1）的推导，约三句话"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+        <span id="charCount" style="font-size:12px;color:var(--text3)">0 字</span>
+        <button class="btn-primary" id="startBtn" onclick="startSession()" disabled>开始专注 →</button>
+      </div>
     </div>
-    <span class="label-xs">我想在30分钟内完成…</span>
-    <textarea id="taskInput" placeholder="例：写完第三章公式（1）的推导，约三句话"></textarea>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
-      <span id="charCount" style="font-size:12px;color:var(--text3)">0 字</span>
-      <button class="btn-primary" id="startBtn" onclick="startSession()" disabled>开始专注 →</button>
+
+    <!-- 懒蛋人类模式 -->
+    <div id="modeAI" style="display:none">
+      <div class="time-row">
+        <div class="time-pill">
+          <label>开始</label>
+          <input type="time" id="startTimeInputAI" onchange="updateEndTimeAI()">
+          <button onclick="resetToNowAI()" title="刷新为当前时间" style="background:none;border:none;padding:0 0 0 4px;cursor:pointer;color:var(--text3);display:flex;align-items:center;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">
+            <i class="ti ti-refresh" style="font-size:15px"></i>
+          </button>
+        </div>
+        <span style="font-size:13px;color:var(--text3)">→</span>
+        <div class="end-badge" id="endTimeBadgeAI">30 分钟后</div>
+      </div>
+      <span class="label-xs">今天想做什么？随便说，AI来拆</span>
+      <textarea id="aiGoalInput" placeholder="今天想做什么？随便说，AI来拆。&#10;例：「我要写工作报告」或「昨天写到引言第二段，今天接着写」" style="min-height:76px"></textarea>
+
+      <!-- 任务列表折叠面板 -->
+      <div id="aiTaskPanel" style="display:none;margin-top:10px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+        <button onclick="toggleTaskPanel()" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--bg2);border:none;color:var(--text2);font-size:13px;cursor:pointer;text-align:left">
+          <span id="taskPanelLabel">待办任务</span>
+          <i class="ti ti-chevron-down" id="taskPanelIcon" style="font-size:14px;transition:transform .2s"></i>
+        </button>
+        <div id="taskPanelBody" style="padding:8px 0">
+          <div id="aiTaskList"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+        <span id="aiStatus" style="font-size:12px;color:var(--text3)"></span>
+        <div style="display:flex;gap:8px">
+          <button id="aiStartBtn" class="btn-primary" onclick="startSessionFromAI()" style="display:none">开始专注 →</button>
+          <button id="aiAskBtn" class="btn-primary" onclick="askAI()">让AI来拆 ✦</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -311,8 +356,11 @@ function addMins(t,mins){
 }
 function initStartTime(){
   const n=new Date();
-  document.getElementById('startTimeInput').value=fmt(n.getHours())+':'+fmt(n.getMinutes());
+  const val=fmt(n.getHours())+':'+fmt(n.getMinutes());
+  document.getElementById('startTimeInput').value=val;
+  document.getElementById('startTimeInputAI').value=val;
   updateEndTime();
+  updateEndTimeAI();
 }
 function resetToNow(){
   const n=new Date();
@@ -441,7 +489,10 @@ function prepareNextTask(newStart){
   document.getElementById('startBtn').disabled=true;
   document.getElementById('progressSlider').value=50;
   document.getElementById('sliderPct').textContent='50%';
-  if(newStart)document.getElementById('startTimeInput').value=newStart;
+  if(newStart){
+    document.getElementById('startTimeInput').value=newStart;
+    document.getElementById('startTimeInputAI').value=newStart;
+  }
   updateEndTime();
   renderHistory();
   showPhase('phaseSetup');
@@ -469,6 +520,11 @@ function updateSlider(v){document.getElementById('sliderPct').textContent=v+'%';
 
 function markDone(){
   history.push({task:currentTask,pct:100,done:true,session:sessionCount,startTime:sessionStartTime,endTime:sessionEndTime});
+  // 标记对应的AI任务为已完成
+  if(aiTasks.length&&aiTasks[aiTaskIndex]===currentTask){
+    completedAITasks.add(aiTaskIndex);
+    renderAITaskList();
+  }
   lastUnfinishedTask=null;finishRound(false);
 }
 function markPartial(){
@@ -480,8 +536,29 @@ function finishRound(carry){
   document.getElementById('progressSlider').value=50;
   document.getElementById('sliderPct').textContent='50%';
   const notice=document.getElementById('carryNotice');
-  if(carry&&lastUnfinishedTask){taskInput.value=lastUnfinishedTask;notice.style.display='flex';}
-  else{taskInput.value='';notice.style.display='none';}
+
+  // AI模式：推进任务队列
+  if(aiTasks.length&&!carry){
+    const next=advanceAITask();
+    if(next){
+      showAICurrentTask(next);
+      // 如果当前在懒蛋人类模式，留在那里；否则填入输入框
+      if(currentTab==='plan'){
+        taskInput.value=next;
+        notice.style.display='none';
+      }
+    } else {
+      taskInput.value='';
+      notice.style.display='none';
+    }
+  } else if(carry&&lastUnfinishedTask){
+    taskInput.value=lastUnfinishedTask;
+    notice.style.display='flex';
+  } else {
+    taskInput.value='';
+    notice.style.display='none';
+  }
+
   const l=taskInput.value.trim().length;
   document.getElementById('charCount').textContent=l+' 字';
   document.getElementById('startBtn').disabled=l===0;
@@ -795,6 +872,263 @@ ${rows}
 </body></html>`;
 
   downloadHTML(html, date.replace(/年|月/g,'-').replace('日','')+'_专注记录_可视化版.html');
+}
+
+// ── 选项卡 ──
+let currentTab='plan';
+function switchTab(tab){
+  currentTab=tab;
+  const isPlan=tab==='plan';
+  document.getElementById('modePlan').style.display=isPlan?'block':'none';
+  document.getElementById('modeAI').style.display=isPlan?'none':'block';
+  document.getElementById('tabPlan').style.background=isPlan?'var(--text)':'transparent';
+  document.getElementById('tabPlan').style.color=isPlan?'var(--bg)':'var(--text2)';
+  document.getElementById('tabAI').style.background=isPlan?'transparent':'var(--text)';
+  document.getElementById('tabAI').style.color=isPlan?'var(--text2)':'var(--bg)';
+  if(!isPlan){
+    // 同步时间
+    const v=document.getElementById('startTimeInput').value;
+    if(v)document.getElementById('startTimeInputAI').value=v;
+    updateEndTimeAI();
+    // 只有第一次切过来（没有对话历史）才重置
+    if(aiConversation.length===0){
+      document.getElementById('aiGoalInput').placeholder='今天想做什么？随便说，AI来拆。\n例：「我要写工作报告」或「昨天写到引言第二段，今天接着写」';
+      document.getElementById('aiStatus').textContent='';
+      document.getElementById('aiStartBtn').style.display='none';
+    }
+  }
+}
+
+function updateEndTimeAI(){
+  const v=document.getElementById('startTimeInputAI').value;
+  if(!v){document.getElementById('endTimeBadgeAI').textContent='30 分钟后';return;}
+  document.getElementById('endTimeBadgeAI').textContent=addMins(v,30);
+}
+function resetToNowAI(){
+  const n=new Date();
+  document.getElementById('startTimeInputAI').value=fmt(n.getHours())+':'+fmt(n.getMinutes());
+  updateEndTimeAI();
+  renderHistory();
+}
+
+// ── AI 任务队列 ──
+let aiTasks=[];
+let aiTaskIndex=0;
+let taskPanelOpen=true;
+let completedAITasks=new Set(); // 记录已完成的任务索引
+
+function toggleTaskPanel(){
+  taskPanelOpen=!taskPanelOpen;
+  document.getElementById('taskPanelBody').style.display=taskPanelOpen?'block':'none';
+  document.getElementById('taskPanelIcon').style.transform=taskPanelOpen?'rotate(180deg)':'';
+}
+
+function renderAITaskList(){
+  const list=document.getElementById('aiTaskList');
+  const remaining=aiTasks.slice(aiTaskIndex);
+  document.getElementById('taskPanelLabel').textContent='待办任务 '+remaining.length+' 项';
+  list.innerHTML='';
+  aiTasks.forEach((t,i)=>{
+    const done=completedAITasks.has(i);
+    const current=i===aiTaskIndex;
+    const div=document.createElement('div');
+    div.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;transition:background .12s;'+(current?'background:var(--bg3)':'');
+    div.onmouseover=()=>{if(!current)div.style.background='var(--bg2)';};
+    div.onmouseout=()=>{if(!current)div.style.background='';};
+    div.onclick=()=>selectAITask(i);
+    const idx=document.createElement('span');
+    idx.style.cssText='font-size:11px;color:var(--text3);flex-shrink:0;width:16px;text-align:right';
+    idx.textContent=(i+1)+'.';
+    const txt=document.createElement('span');
+    txt.style.cssText='font-size:13px;flex:1;line-height:1.5;'+(done?'text-decoration:line-through;color:var(--text3)':current?'color:var(--text);font-weight:500':'color:var(--text2)');
+    txt.textContent=t;
+    div.appendChild(idx);div.appendChild(txt);
+    if(current){
+      const tag=document.createElement('span');
+      tag.style.cssText='font-size:10px;color:var(--blue-text);background:var(--blue-bg);padding:2px 6px;border-radius:99px;flex-shrink:0';
+      tag.textContent='进行中';
+      div.appendChild(tag);
+    }
+    list.appendChild(div);
+  });
+  document.getElementById('aiTaskPanel').style.display=aiTasks.length?'block':'none';
+}
+
+function selectAITask(i){
+  aiTaskIndex=i;
+  renderAITaskList();
+  const text=aiTasks[i];
+  document.getElementById('aiGoalInput').value=text;
+  document.getElementById('aiStartBtn').style.display='inline-block';
+}
+
+function showAICurrentTask(text){
+  document.getElementById('aiGoalInput').value=text;
+  document.getElementById('aiStartBtn').style.display='inline-block';
+}
+
+function startSessionFromAI(){
+  const text=document.getElementById('aiGoalInput').value.trim();
+  if(!text)return;
+  const aiTime=document.getElementById('startTimeInputAI').value;
+  if(aiTime)document.getElementById('startTimeInput').value=aiTime;
+  updateEndTime();
+  // 此时才同步到 taskInput
+  taskInput.value=text;
+  document.getElementById('carryNotice').style.display='none';
+  taskInput.dispatchEvent(new Event('input'));
+  startSession();
+}
+
+// ── 调用 DeepSeek（多轮对话）──
+let aiConversation=[]; // 对话历史
+
+const AI_SYSTEM_PROMPT=`你是一个专注任务拆解助手。用户告诉你今天想做什么，你帮他们拆解成若干个30分钟的具体任务。
+
+## 你的工作流程
+
+**第一步：识别任务类型**
+根据用户输入判断属于哪类任务：
+学术写作、定理证明/推导、文献调研、读文献/读书、代码开发、数据处理/分析、翻译、修改润色、PPT/汇报、考试备考、背诵记忆、练习（乐器/口语）、运动训练、讨论/会议准备、工作任务、其他
+
+**第二步：判断信息是否足够**
+核心标准：我能不能给出一个用户今天坐下来就能立刻开始执行的第一步？
+- 能 → 直接输出任务列表
+- 不能 → 追问，最多问2个问题，不要同时问超过2个
+
+**不同类型的追问重点：**
+- 学术写作：写到哪了？这次想完成哪一块？
+- 定理证明：证明什么定理？已经推到哪一步了？
+- 代码：什么语言？实现什么功能？
+- 读文献：读什么主题？目标是泛读还是精读做笔记？
+- 运动：新手还是有基础？目标是什么（减脂/增肌/耐力）？今天有多少时间？
+- 考试备考：考什么？哪个部分最需要攻克？距离考试还有多久？
+- 工作任务：产出是什么？给谁看？
+- 背诵记忆：用什么教材或范围？今天的目标量？
+- 其他：产出是什么？完成的标准是什么？
+
+## 拆解原则
+- 每个任务是一个具体动作，不是一个主题
+- 每个任务30分钟内可以完成
+- 任务之间有顺序逻辑
+- 任务描述简短直接，15字以内
+- 不预判内容数量，把"确认内容范围"本身作为第一个任务
+- 根据任务类型决定粒度，不要套用统一标准
+
+**不同类型的粒度示例：**
+- 学术写作："写引言第一段点明背景"，不是"写引言"
+- 定理证明："尝试用反证法推第一步"，不是"证明定理"
+- 代码：根据用户描述的功能判断合理起点，不固定从某个地方开始
+- 读文献："读第二节并用一句话总结核心论点"，不是"读论文"
+- 运动（新手）："完成10分钟热身+基础动作讲解视频"
+- 运动（有基础）："完成第一组力量训练：深蹲4×12"
+- 考试备考："做错题本上高频错题10道"，不是"复习"
+- 背单词："背GRE单词表第3组前50个，过一遍"
+- 工作任务："列出报告的三级提纲"，不是"写报告"
+
+## 输出格式（严格遵守，不能有任何其他内容）
+
+需要追问时，只输出：
+QUESTION: [你的问题]
+
+可以拆解时，只输出：
+TASKS:
+1. [任务一]
+2. [任务二]
+3. [任务三]
+...
+
+绝对不要输出QUESTION和TASKS以外的任何内容，不要解释，不要寒暄，不要"好的"、"明白了"之类的开场白。`;
+
+async function askAI(){
+  const input=document.getElementById('aiGoalInput').value.trim();
+  if(!input)return;
+  const key='sk-e768f46249b94060b1bc28370c6234e6';
+
+  const btn=document.getElementById('aiAskBtn');
+  btn.disabled=true;btn.textContent='AI思考中…';
+  document.getElementById('aiStatus').textContent='';
+
+  // 把用户输入加入对话历史
+  aiConversation.push({role:'user',content:input});
+
+  try{
+    const res=await fetch('https://api.deepseek.com/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({
+        model:'deepseek-chat',
+        max_tokens:600,
+        messages:[
+          {role:'system',content:AI_SYSTEM_PROMPT},
+          ...aiConversation
+        ]
+      })
+    });
+    if(!res.ok){
+      const err=await res.json().catch(()=>({}));
+      if(res.status===401) document.getElementById('aiStatus').textContent='API Key 无效，请联系工具作者';
+      else document.getElementById('aiStatus').textContent='请求失败：'+(err.error?.message||res.status);
+      aiConversation.pop(); // 失败时回滚
+      btn.disabled=false;btn.textContent='让AI来拆 ✦';return;
+    }
+    const data=await res.json();
+    const reply=data.choices?.[0]?.message?.content?.trim()||'';
+
+    // 把AI回复加入对话历史
+    aiConversation.push({role:'assistant',content:reply});
+
+    if(reply.startsWith('QUESTION:')){
+      // AI需要追问
+      const question=reply.replace('QUESTION:','').trim();
+      document.getElementById('aiGoalInput').value='';
+      document.getElementById('aiGoalInput').placeholder=question;
+      document.getElementById('aiStatus').textContent='↑ '+question;
+      document.getElementById('aiGoalInput').focus();
+    } else if(reply.startsWith('TASKS:')){
+      // AI给出任务列表
+      const lines=reply.replace('TASKS:','').trim().split('\n').map(l=>l.trim()).filter(l=>l);
+      const tasks=lines.map(l=>l.replace(/^\d+[\.、。\)）]\s*/,'').trim()).filter(l=>l.length>0);
+      if(!tasks.length){
+        document.getElementById('aiStatus').textContent='AI没有返回有效任务，请重试';
+        btn.disabled=false;btn.textContent='让AI来拆 ✦';return;
+      }
+      aiTasks=tasks;
+      aiTaskIndex=0;
+      completedAITasks=new Set();
+      renderAITaskList();
+      showAICurrentTask(aiTasks[0]);
+      // 重置输入框placeholder
+      document.getElementById('aiGoalInput').placeholder='今天想做什么？随便说，AI来拆。\n例：「我要写工作报告」或「昨天写到引言第二段，今天接着写」';
+      document.getElementById('aiStatus').textContent='';
+    } else {
+      // 兜底：尝试直接解析
+      const lines=reply.split('\n').map(l=>l.trim()).filter(l=>l);
+      const tasks=lines.map(l=>l.replace(/^\d+[\.、。\)）]\s*/,'').trim()).filter(l=>l.length>0);
+      if(tasks.length){
+        aiTasks=tasks;aiTaskIndex=0;completedAITasks=new Set();
+        renderAITaskList();showAICurrentTask(aiTasks[0]);
+        document.getElementById('aiGoalInput').placeholder='今天想做什么？随便说，AI来拆。\n例：「我要写工作报告」或「昨天写到引言第二段，今天接着写」';
+      } else {
+        document.getElementById('aiStatus').textContent='格式异常，请重试';
+      }
+    }
+  }catch(e){
+    document.getElementById('aiStatus').textContent='网络错误，请检查连接';
+    aiConversation.pop();
+  }
+  btn.disabled=false;btn.textContent='让AI来拆 ✦';
+}
+
+// 轮次结束后推进 AI 任务队列
+function advanceAITask(){
+  if(!aiTasks.length)return;
+  if(aiTaskIndex<aiTasks.length-1){
+    aiTaskIndex++;
+    renderAITaskList();
+    return aiTasks[aiTaskIndex];
+  }
+  return null;
 }
 
 // close modal on overlay click
