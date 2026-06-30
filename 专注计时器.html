@@ -247,8 +247,11 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 <!-- ── TIMER ── -->
 <div id="phaseTimer" class="phase">
   <div class="cur-card">
-    <span class="label-xs">本轮目标</span>
+    <span class="label-xs" id="timerCardLabel">本轮目标</span>
     <div id="timerTaskLabel" style="font-size:15px;line-height:1.5;margin-top:2px"></div>
+    <div id="restingNote" style="display:none;font-size:12px;color:var(--blue-text);margin-top:6px">
+      <i class="ti ti-coffee"></i> 休息中 · 任务计时已暂存，点「结束休息」继续
+    </div>
   </div>
   <div class="dots-row" id="sessionDots"></div>
   <div class="timer-center">
@@ -270,6 +273,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
     <button class="btn-ghost" id="pauseBtn" onclick="togglePause()">暂停</button>
     <button class="btn-ghost" id="earlyBtn" onclick="earlyFinish()" style="color:var(--green-text);border-color:var(--green-border)">提前结束</button>
+    <button class="btn-ghost" id="restToggleBtn" onclick="toggleRest()" style="color:var(--blue-text);border-color:var(--blue-border)">休息 ☕</button>
     <button class="btn-ghost" id="overtimeStopBtn" onclick="stopOvertime()" style="color:var(--red-text);border-color:var(--red-border);display:none">时间到 →</button>
   </div>
 </div>
@@ -283,38 +287,19 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   <div class="card">
     <div style="font-size:16px;font-weight:600;margin-bottom:.9rem">提前结束，接下来？</div>
     <div class="choice-row">
-      <button class="choice-btn" id="choiceNext" onclick="selectChoice('next')">
+      <button class="choice-btn" id="choiceNext" onclick="selectChoice('next')" style="display:none">
         <i class="ti ti-arrow-right"></i>下一个任务
       </button>
       <button class="choice-btn" id="choiceDone" onclick="selectChoice('done')">
-        <i class="ti ti-check"></i><span id="choiceDoneLabel">已经完成！</span>
+        <i class="ti ti-check"></i><span id="choiceDoneLabel">完成！</span>
       </button>
       <button class="choice-btn" id="choicePartial" onclick="selectChoice('partial')">
-        <i class="ti ti-progress"></i>未完成
-      </button>
-      <button class="choice-btn" id="choiceRest" onclick="selectChoice('rest')">
-        <i class="ti ti-coffee"></i>休息到时间段结束
+        <i class="ti ti-progress"></i>未完成！
       </button>
     </div>
     <div style="margin-top:1rem;text-align:right">
       <button class="btn-primary" id="earlyConfirmBtn" onclick="confirmEarlyChoice()" disabled>确认 →</button>
     </div>
-  </div>
-</div>
-
-<!-- ── REST ── -->
-<div id="phaseRest" class="phase">
-  <div style="text-align:center;margin-bottom:.5rem">
-    <h1>休息中</h1>
-    <span class="sub">到时间段结束为止</span>
-  </div>
-  <div class="rest-big" id="restTimer">—</div>
-  <div style="text-align:center;font-size:13px;color:var(--text2);margin-bottom:1.75rem">
-    休息到：<strong id="restEndLabel" style="color:var(--text)">—</strong>
-    <span id="restDuration" style="margin-left:6px;color:var(--text3)"></span>
-  </div>
-  <div style="text-align:center">
-    <button class="btn-ghost" onclick="endRest()">结束休息，返回</button>
   </div>
 </div>
 
@@ -369,6 +354,10 @@ let timerMode='down';            // 'down' 倒计时 | 'buffer' 8秒缓冲 | 'up
 let bufferInterval=null,bufferLeft=8;
 let overtimeBaseSec=0,overtimeSegStart=null; // 正计时累计 + 当前运行段起点
 let currentBlocks=1;             // 本轮结算时写入 history 的方块数
+// ── 休息（影子任务，与计时共享同一条时间线） ──
+let isResting=false;             // 当前显示名是否为「休息」
+let segments=[];                 // 本轮已切出的分段 [{name, mins}]，name 为 currentTask 或 '休息'
+let segBaseSec=0,segStart=null;  // 当前分段已计累计秒 + 本次运行起点（配合暂停）
 let earlyEndTime=null;           // 提前结束时自动捕获的时刻
 let feedbackContext='normal';    // 'normal' | 'earlyPlan' | 'earlyAI'
 
@@ -416,6 +405,10 @@ function startSession(){
   deadlineTs=Date.now()+DURATION*1000; // 方案一：记录目标结束时间戳
   pausedTimeLeft=null;
   timerMode='down';overtimeBaseSec=0;overtimeSegStart=null;currentBlocks=1;
+  isResting=false;segments=[];segBaseSec=0;segStart=Date.now();
+  document.getElementById('restingNote').style.display='none';
+  document.getElementById('restToggleBtn').textContent='休息 ☕';
+  document.getElementById('restToggleBtn').style.display='';
   clearInterval(bufferInterval);
   document.getElementById('overtimeBuffer').style.display='none';
   document.getElementById('earlyBtn').style.display='';
@@ -433,6 +426,30 @@ function startSession(){
   timerInterval=setInterval(tick,1000);
 }
 
+// ── 分段计时：把"自然流逝的这一段"按当前显示名落一笔，再切换到新名字 ──
+function currentSegElapsedSec(){
+  return segBaseSec+(isPaused?0:(Date.now()-segStart)/1000);
+}
+function flushSegment(){
+  const sec=currentSegElapsedSec();
+  const mins=sec/60;
+  if(mins>0.0167){ // 至少 1 秒，避免 0 分钟噪音段
+    const name=isResting?'休息':currentTask;
+    const last=segments[segments.length-1];
+    if(last&&last.name===name)last.mins+=mins;
+    else segments.push({name,mins});
+  }
+  segBaseSec=0;segStart=Date.now();
+}
+function toggleRest(){
+  if(timerMode!=='down')return; // 正计时阶段不提供休息入口
+  flushSegment();
+  isResting=!isResting;
+  document.getElementById('restToggleBtn').textContent=isResting?'结束休息':'休息 ☕';
+  document.getElementById('restingNote').style.display=isResting?'block':'none';
+  document.getElementById('timerCardLabel').textContent=isResting?'休息中':'本轮目标';
+}
+
 function tick(){
   if(isPaused)return;
   if(timerMode==='down'){
@@ -447,10 +464,12 @@ function tick(){
 
 // ── 倒计时归零：8 秒缓冲，什么都不点则自动转正计时 ──
 function enterBuffer(){
+  flushSegment(); // 把走到归零这一刻的分段（任务或休息）落一笔
   timerMode='buffer';bufferLeft=8;
   document.getElementById('pauseBtn').style.display='none';
   document.getElementById('earlyBtn').style.display='none';
   document.getElementById('overtimeStopBtn').style.display='none';
+  document.getElementById('restToggleBtn').style.display='none'; // 正计时阶段不提供休息入口
   document.getElementById('timerSubLabel').textContent='已到时';
   document.getElementById('timerText').textContent='00:00';
   updateRing();
@@ -473,10 +492,11 @@ function endRoundFromBuffer(){
   goToFeedback('normal');
 }
 
-// 进入正计时
+// 进入正计时（继续累计归零那一刻正在显示的名字：任务或休息）
 function enterOvertime(){
   timerMode='up';isPaused=false;
   overtimeBaseSec=0;overtimeSegStart=Date.now();
+  segBaseSec=0;segStart=Date.now(); // 分段时钟跟正计时同步重新起算
   document.getElementById('overtimeBuffer').style.display='none';
   document.getElementById('pauseBtn').style.display='';
   document.getElementById('pauseBtn').textContent='暂停';
@@ -494,6 +514,7 @@ function overtimeSec(){
 
 // 正计时阶段点「时间到」：结算，总时长 = 30 + 正计时
 function stopOvertime(){
+  flushSegment(); // 把正计时这一段也按当前名字（任务或休息）落一笔
   clearInterval(timerInterval);
   const total=DURATION+overtimeSec();
   currentBlocks=total/DURATION; // 30分=1块，零头按比例
@@ -518,6 +539,9 @@ function togglePause(){
       pausedTimeLeft=null;
     }
   }
+  // 分段计时同步暂停/继续（暂停时间不计入任何分段）
+  if(isPaused){segBaseSec+=(Date.now()-segStart)/1000;}
+  else{segStart=Date.now();}
   document.getElementById('pauseBtn').textContent=isPaused?'继续':'暂停';
 }
 
@@ -530,57 +554,63 @@ function goToFeedback(ctx){
 }
 
 function earlyFinish(){
+  flushSegment(); // 提前结束：把走到这一刻的分段（任务或休息）落一笔
   clearInterval(timerInterval);clearInterval(bufferInterval);
   // 自动捕获当前时刻作为结束时间，不再手填
   const n=new Date();
   earlyEndTime=fmt(n.getHours())+':'+fmt(n.getMinutes());
   document.getElementById('earlyTaskLabel').textContent=currentTask;
   earlyChoice=null;
-  ['choiceNext','choiceDone','choicePartial','choiceRest'].forEach(id=>document.getElementById(id).classList.remove('selected'));
+  ['choiceNext','choiceDone','choicePartial'].forEach(id=>document.getElementById(id).classList.remove('selected'));
   document.getElementById('earlyConfirmBtn').disabled=true;
-  // 按模式显隐：懒蛋人类没有「下一个任务」，完成按钮文案改「完成！」
-  const isAI=currentTab==='ai';
-  document.getElementById('choiceNext').style.display=isAI?'none':'';
-  document.getElementById('choiceDoneLabel').textContent=isAI?'完成！':'已经完成！';
+  // 「下一个任务」与「完成！」在我有计划下逻辑相同，统一只留「完成！」；两个模式按钮文案一致
+  document.getElementById('choiceNext').style.display='none';
+  document.getElementById('choiceDoneLabel').textContent='完成！';
   showPhase('phaseEarly');
 }
 
 function selectChoice(c){
   earlyChoice=c;
-  ['next','done','partial','rest'].forEach(v=>{
+  ['next','done','partial'].forEach(v=>{
     const el=document.getElementById('choice'+v.charAt(0).toUpperCase()+v.slice(1));
     if(el)el.classList.toggle('selected',c===v);
   });
   document.getElementById('earlyConfirmBtn').disabled=false;
 }
 
+// 把本轮已切出的分段（segments）按"任务名合并一条 + 休息合并一条"写入 history。
+// pct/done 仅用于任务那一条；休息那一条永远不需要完成度。
+function commitSegments(pct,done,endTime){
+  let taskMins=0,restMins=0;
+  segments.forEach(s=>{
+    if(s.name==='休息')restMins+=s.mins;else taskMins+=s.mins;
+  });
+  if(taskMins>0.0167){
+    history.push({task:currentTask,pct,done,session:sessionCount,startTime:sessionStartTime,endTime,early:true,blocks:taskMins/30,mins:Math.round(taskMins)});
+  }
+  if(restMins>0.0167){
+    history.push({task:'休息',pct:100,done:true,session:sessionCount,startTime:sessionStartTime,endTime,early:true,isRest:true,blocks:restMins/30,mins:Math.round(restMins)});
+  }
+}
+
 function confirmEarlyChoice(){
   const isAI=currentTab==='ai';
-  const thisRoundEnd=sessionStartTime?addMins(sessionStartTime,30):sessionEndTime;
 
   if(earlyChoice==='partial'){
-    // 进进度条页（无「全部完成」按钮）；记录在进度确认时写入
+    // 进进度条页（无「完成！」按钮）；记录在进度确认时写入
     goToFeedback(isAI?'earlyAI':'earlyPlan');
     return;
   }
 
-  // next / done / rest 都算作「该段已完成」，提前结束 → 半块；mins 记真实耗时
-  const earlyMins=sessionStartTime?timeDiffMins(sessionStartTime,earlyEndTime):0;
-  history.push({task:currentTask,pct:100,done:true,session:sessionCount,startTime:sessionStartTime,endTime:earlyEndTime,early:true,blocks:0.5,mins:earlyMins});
+  // 'done'：任务段算 100% 完成，休息段单独成行
+  commitSegments(100,true,earlyEndTime);
   lastUnfinishedTask=null;
 
-  if(earlyChoice==='rest'){
-    if(isAI)markAIComplete();
-    startRest(earlyEndTime,thisRoundEnd);
-  } else if(earlyChoice==='done'){
-    if(isAI){
-      markAIComplete();
-      returnToAIList(earlyEndTime,true);
-    } else {
-      // 已经完成！直接入统计，回设置页，输入框清空
-      finishToSetup(earlyEndTime,'');
-    }
-  } else { // 'next'（仅我有计划）
+  if(isAI){
+    markAIComplete();
+    returnToAIList(earlyEndTime,true);
+  } else {
+    // 完成！直接入统计，回设置页，输入框清空
     finishToSetup(earlyEndTime,'');
   }
 }
@@ -617,14 +647,30 @@ function nextPendingIndex(after){
   return -1;
 }
 
-function returnToAIList(newStart,autoNext){
+function returnToAIList(newStart,autoNext,refillIdx,refillText){
   if(newStart){
     document.getElementById('startTimeInput').value=newStart;
     document.getElementById('startTimeInputAI').value=newStart;
   }
   updateEndTime();updateEndTimeAI();
+  // 清空「我有计划」对话框，避免 AI 任务文本残留串台到 plan 框
+  taskInput.value='';
+  document.getElementById('carryNotice').style.display='none';
+  document.getElementById('charCount').textContent='0 字';
+  document.getElementById('startBtn').disabled=true;
   editingAITaskIndex=null;
-  if(autoNext){
+  if(refillIdx!=null && refillIdx>=0 && refillIdx<aiTasks.length){
+    // 未完成：把该任务回填进「懒蛋人类」对话框，可继续或改选；标进行中由调用方负责
+    aiTaskIndex=refillIdx;
+    editingAITaskIndex=refillIdx;
+    document.getElementById('aiGoalInput').value=aiTasks[refillIdx];
+    document.getElementById('aiStartBtn').style.display='inline-block';
+  } else if(refillText){
+    // 未完成但任务非来自列表（手打文本）：仍回填进「懒蛋人类」对话框
+    aiTaskIndex=-1;
+    document.getElementById('aiGoalInput').value=refillText;
+    document.getElementById('aiStartBtn').style.display='inline-block';
+  } else if(autoNext){
     const j=nextPendingIndex(runningAITaskIndex);
     if(j>=0){
       aiTaskIndex=j;
@@ -671,28 +717,6 @@ function timeDiffMins(fromStr,toStr){
   return diff;
 }
 
-function startRest(earlyEnd,restEnd){
-  // 休息时长 = 原计划结束 - 提前完成时间，纯秒数倒计时，与系统时钟无关
-  const mins=timeDiffMins(earlyEnd,restEnd);
-  let restLeft=mins*60;
-  document.getElementById('restEndLabel').textContent=restEnd;
-  document.getElementById('restDuration').textContent='共 '+mins+' 分钟';
-  clearInterval(restInterval);
-  function upd(){
-    document.getElementById('restTimer').textContent=fmt(Math.floor(restLeft/60))+':'+fmt(restLeft%60);
-    if(restLeft<=0){clearInterval(restInterval);endRest(restEnd);return;}
-    restLeft--;
-  }
-  upd();restInterval=setInterval(upd,1000);
-  showPhase('phaseRest');
-}
-function endRest(restEnd){
-  clearInterval(restInterval);
-  const t=restEnd||sessionEndTime;
-  if(currentTab==='ai')returnToAIList(t,true);
-  else finishToSetup(t,'');
-}
-
 function prepareNextTask(newStart){
   taskInput.value='';
   document.getElementById('carryNotice').style.display='none';
@@ -735,8 +759,9 @@ function updateSessionDots(){
 function updateSlider(v){document.getElementById('sliderPct').textContent=v+'%';}
 
 function markDone(){
-  // 只在 normal 上下文可达（提前结束-未完成时此按钮隐藏）；mins = currentBlocks*30（含超时）
-  history.push({task:currentTask,pct:100,done:true,session:sessionCount,startTime:sessionStartTime,endTime:sessionEndTime,blocks:currentBlocks,mins:Math.round(currentBlocks*30)});
+  // 只在 normal 上下文可达（提前结束-未完成时此按钮隐藏）；自然结束时把最后一段也落一笔
+  flushSegment();
+  commitSegments(100,true,sessionEndTime);
   lastUnfinishedTask=null;
   if(currentTab==='ai'){
     markAIComplete();
@@ -748,24 +773,24 @@ function markDone(){
 function markPartial(){
   const pct=parseInt(document.getElementById('progressSlider').value);
   if(feedbackContext==='earlyPlan'){
-    const m=sessionStartTime?timeDiffMins(sessionStartTime,earlyEndTime):0;
-    history.push({task:currentTask,pct,done:false,session:sessionCount,startTime:sessionStartTime,endTime:earlyEndTime,early:true,blocks:0.5,mins:m});
+    commitSegments(pct,false,earlyEndTime);
     lastUnfinishedTask=currentTask;
     finishToSetup(earlyEndTime,currentTask); // 自动回填同样文本
     return;
   }
   if(feedbackContext==='earlyAI'){
-    const m=sessionStartTime?timeDiffMins(sessionStartTime,earlyEndTime):0;
-    history.push({task:currentTask,pct,done:false,session:sessionCount,startTime:sessionStartTime,endTime:earlyEndTime,early:true,blocks:0.5,mins:m});
+    commitSegments(pct,false,earlyEndTime);
     markAIInProgress();
-    returnToAIList(earlyEndTime,false); // 未完成 → 用户自己挑下一个
+    // 未完成 → 该任务回填进「懒蛋人类」对话框，标进行中，由用户决定继续或改选
+    returnToAIList(earlyEndTime,false,runningAITaskIndex,currentTask);
     return;
   }
-  // normal
-  history.push({task:currentTask,pct,done:false,session:sessionCount,startTime:sessionStartTime,endTime:sessionEndTime,blocks:currentBlocks,mins:Math.round(currentBlocks*30)});
+  // normal：自然结束时把最后一段也落一笔
+  flushSegment();
+  commitSegments(pct,false,sessionEndTime);
   if(currentTab==='ai'){
     markAIInProgress();
-    returnToAIList(sessionEndTime,false); // 未完成 → 用户自己挑下一个
+    returnToAIList(sessionEndTime,false,runningAITaskIndex,currentTask);
   } else {
     lastUnfinishedTask=currentTask;
     finishRoundPlan(true);
@@ -838,27 +863,31 @@ function renderHistory(){
   const done=history.filter(h=>h.done).length;
   document.getElementById('histSummary').textContent=done+' 完成 / '+history.length+' 轮 · 专注约 '+totalFocusMins()+' 分钟';
 
-  // 合并同名跨轮任务为事件（同 buildEvents 逻辑，但按时间正序）
+  // 按任务名全局合并（不要求相邻），保留首次出现顺序
+  const evtMap=new Map();
   const evts=[];
   history.forEach(item=>{
     const b=item.blocks!=null?item.blocks:(item.early?0.5:1);
-    const last=evts[evts.length-1];
-    if(last&&last.name===item.task.trim()){
-      last.endTime=item.endTime||last.endTime;
-      last.blocks+=b;
-      last.allDone=last.allDone&&item.done;
-      last.early=last.early||(item.early||false);
-      last.lastPct=item.done?100:item.pct;
+    const name=item.task.trim();
+    let ev=evtMap.get(name);
+    if(ev){
+      ev.endTime=item.endTime||ev.endTime;
+      ev.blocks+=b;
+      ev.allDone=ev.allDone&&item.done;
+      ev.early=ev.early||(item.early||false);
+      ev.lastPct=item.done?100:item.pct;
     } else {
-      evts.push({
-        name:item.task.trim(),
+      ev={
+        name,
         startTime:item.startTime||'',
         endTime:item.endTime||'',
         blocks:b,
         allDone:item.done,
         early:item.early||false,
         lastPct:item.done?100:item.pct,
-      });
+      };
+      evtMap.set(name,ev);
+      evts.push(ev);
     }
   });
 
@@ -900,6 +929,7 @@ function doReset(){
   clearInterval(timerInterval);clearInterval(restInterval);clearInterval(bufferInterval);
   history=[];sessionCount=0;lastUnfinishedTask=null;currentTask='';
   timerMode='down';overtimeBaseSec=0;overtimeSegStart=null;currentBlocks=1;isPaused=false;
+  isResting=false;segments=[];segBaseSec=0;segStart=null;
   aiTasks=[];aiTaskIndex=0;completedAITasks=new Set();inProgressAITasks=new Set();
   editingAITaskIndex=null;runningAITaskIndex=null;appendMode=false;aiConversation=[];
   document.getElementById('aiTaskPanel').style.display='none';
@@ -923,21 +953,22 @@ function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g
 
 // ── 导出：合并同名跨轮任务为事件 ──
 function buildEvents(){
+  const eventMap=new Map();
   const events=[];
   history.forEach(item=>{
     const b=item.blocks!=null?item.blocks:(item.early?(item.earlyFill||0.5):1);
-    const last=events[events.length-1];
     const name=item.task.trim();
-    if(last && last.name===name){
-      // 同名任务：合并到上一个事件
-      last.endTime=item.endTime||last.endTime;
-      last.sessions.push(item);
-      last.totalPct=(last.totalPct||100)+( item.done?100:item.pct );
-      last.allDone=last.allDone&&item.done;
-      last.anyEarly=last.anyEarly||(item.early||false);
-      last.blocks+=b;
+    let ev=eventMap.get(name);
+    if(ev){
+      // 同名任务：全局合并（不要求相邻）
+      ev.endTime=item.endTime||ev.endTime;
+      ev.sessions.push(item);
+      ev.totalPct=(ev.totalPct||100)+( item.done?100:item.pct );
+      ev.allDone=ev.allDone&&item.done;
+      ev.anyEarly=ev.anyEarly||(item.early||false);
+      ev.blocks+=b;
     } else {
-      events.push({
+      ev={
         name,
         startTime: item.startTime||'',
         endTime: item.endTime||'',
@@ -945,7 +976,9 @@ function buildEvents(){
         allDone: item.done,
         anyEarly: item.early||false,
         blocks: b,
-      });
+      };
+      eventMap.set(name,ev);
+      events.push(ev);
     }
   });
   return events;
@@ -1225,10 +1258,11 @@ function showAICurrentTask(text){
 }
 
 function startSessionFromAI(){
+  // 只能从列表选中任务后开始；不允许凭空打字直接开始
+  if(editingAITaskIndex==null || editingAITaskIndex<0 || editingAITaskIndex>=aiTasks.length)return;
   const text=document.getElementById('aiGoalInput').value.trim();
   if(!text)return;
-  // 记录本轮对应的任务索引（若来自列表选择）
-  runningAITaskIndex=(editingAITaskIndex!=null)?editingAITaskIndex:null;
+  runningAITaskIndex=editingAITaskIndex;
   const aiTime=document.getElementById('startTimeInputAI').value;
   if(aiTime)document.getElementById('startTimeInput').value=aiTime;
   updateEndTime();
@@ -1393,14 +1427,14 @@ function applyParsedTasks(tasks){
     const base=aiTasks.length;
     aiTasks=aiTasks.concat(tasks);
     aiTaskIndex=base;                 // 选中第一条新任务
-    editingAITaskIndex=null;
+    editingAITaskIndex=base;          // 视为"已从列表选中"，可直接开始
     appendMode=false;
   } else {
     aiTasks=tasks;
     aiTaskIndex=0;
     completedAITasks=new Set();
     inProgressAITasks=new Set();
-    editingAITaskIndex=null;
+    editingAITaskIndex=0;
   }
   renderAITaskList();
   showAICurrentTask(aiTasks[aiTaskIndex]);
