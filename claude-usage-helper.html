@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude 用量策略助手</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1F3F1;--surface:#FFFFFF;--ink:#16211D;--muted:#5B6660;
+    --hair:rgba(22,33,29,.12);--hair-soft:rgba(22,33,29,.06);
+    --teal:#0F7A5C;--teal-soft:#E2F0EB;
+    --blue:#2D6299;--blue-soft:#E5EDF6;
+    --amber:#A86A0C;--amber-soft:#F6ECD9;
+    --red:#B53030;--red-soft:#F9E5E5;
+    --radius:14px;--radius-sm:9px;
+    --body:"Space Grotesk","PingFang SC","Hiragino Sans GB","Microsoft YaHei",-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{color-scheme:light}
+  body{font-family:var(--body);background:var(--paper);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased;padding:32px 20px 56px}
+  .wrap{max-width:680px;margin:0 auto}
+  header{margin-bottom:28px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);display:flex;align-items:center;gap:9px;margin-bottom:14px}
+  .eyebrow::after{content:"";flex:1;height:1px;background:var(--hair)}
+  h1{font-size:30px;font-weight:600;letter-spacing:-.01em;line-height:1.2}
+  .sub{font-size:15px;color:var(--muted);margin-top:9px;max-width:46ch}
+
+  .panel{background:var(--surface);border:1px solid var(--hair);border-radius:var(--radius);padding:22px;margin-bottom:16px}
+  .field{margin-bottom:20px}.field:last-child{margin-bottom:0}
+  .label{font-size:13px;font-weight:500;color:var(--muted);margin-bottom:10px;display:block}
+  .label-hint{font-size:12px;font-weight:400;opacity:.7;margin-left:6px}
+
+  /* mode tabs */
+  .mode-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:18px}
+  .mode-tab input{position:absolute;opacity:0;pointer-events:none}
+  .mode-tab label{
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    padding:12px 6px;border:1px solid var(--hair);border-radius:var(--radius-sm);
+    cursor:pointer;background:var(--surface);text-align:center;
+    transition:background .12s,border-color .12s;user-select:none;
+  }
+  .mode-tab label:hover{border-color:rgba(22,33,29,.28)}
+  .mode-tab input:checked + label{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .mode-tab input:focus-visible + label{outline:2px solid var(--teal);outline-offset:2px}
+  .mode-icon{font-size:20px;line-height:1}
+  .mode-name{font-size:13px;font-weight:600}
+  .mode-desc{font-size:11px;opacity:.7;line-height:1.3}
+  .mode-tab input:checked + label .mode-desc{opacity:.6}
+
+  /* scenario chips */
+  .seg{display:flex;flex-wrap:wrap;gap:8px}
+  .seg input{position:absolute;opacity:0;pointer-events:none}
+  .seg label{font-size:13.5px;padding:7px 14px;border:1px solid var(--hair);border-radius:99px;cursor:pointer;background:var(--surface);color:var(--ink);transition:background .12s,border-color .12s,color .12s;user-select:none;line-height:1.3}
+  .seg label:hover{border-color:rgba(22,33,29,.28)}
+  .seg input:checked + label{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .seg input:focus-visible + label{outline:2px solid var(--teal);outline-offset:2px}
+
+  .toggle{display:inline-flex;align-items:center;gap:11px;cursor:pointer;user-select:none}
+  .toggle input{position:absolute;opacity:0;pointer-events:none}
+  .switch{width:42px;height:24px;border-radius:99px;background:rgba(22,33,29,.18);position:relative;transition:background .15s;flex:none}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .toggle input:checked + .switch{background:var(--teal)}
+  .toggle input:checked + .switch::after{transform:translateX(18px)}
+  .toggle .tlabel{font-size:14px}
+
+  /* usage sync */
+  .sync-panel{background:var(--surface);border:1px solid var(--hair);border-radius:var(--radius);padding:20px 22px;margin-bottom:16px}
+  .sync-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+  .sync-title{font-size:13px;font-weight:500;color:var(--muted)}
+  .sync-hint{font-size:12px;color:var(--muted);opacity:.7}
+  .sync-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .sync-number{font-size:28px;font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums;min-width:52px;transition:color .2s}
+  .sync-pct{font-size:14px;color:var(--muted);margin-left:-4px}
+  .sync-slider{flex:1;min-width:140px}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:99px;background:var(--hair);cursor:pointer;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--ink);cursor:pointer;transition:transform .1s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15)}
+  .usage-bar-wrap{margin-top:14px}
+  .usage-bar-track{height:8px;border-radius:99px;background:var(--hair-soft);border:1px solid var(--hair);overflow:hidden}
+  .usage-bar-fill{height:100%;border-radius:99px;transition:width .25s,background .25s}
+  .usage-bar-labels{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--muted)}
+
+  /* hero */
+  .hero{background:var(--surface);border:1px solid var(--hair);border-radius:var(--radius);padding:24px 22px;margin-bottom:16px}
+  .hero-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .hero-n{font-size:58px;font-weight:600;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;transition:color .2s;color:var(--teal)}
+  .hero-unit{font-size:19px;font-weight:500}
+  .hero-sub{font-size:13px;color:var(--muted);margin-top:2px}
+
+  .runway{margin-top:18px}
+  .track{display:flex;gap:3px}
+  .tick{flex:1;height:14px;border-radius:3px;background:var(--hair-soft);transition:background .15s}
+  .tick.done{background:rgba(22,33,29,.18)}
+  .tick.on{background:var(--teal)}
+  .tick.warn{background:var(--amber)}
+  .tick.danger{background:var(--red)}
+  .tick.cut{outline:2px dashed rgba(168,106,12,.5);outline-offset:-1px;background:var(--amber-soft)}
+  .tick.cut.danger-cut{outline-color:rgba(181,48,48,.5);background:var(--red-soft)}
+  .track-legend{display:flex;justify-content:space-between;margin-top:9px;font-size:12px;color:var(--muted)}
+  .track-legend b{font-weight:500;color:var(--ink)}
+  .alert-box{margin-top:14px;padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;line-height:1.55;font-weight:500}
+  .alert-ok{background:var(--teal-soft);color:var(--teal)}
+  .alert-warn{background:var(--amber-soft);color:var(--amber)}
+  .alert-danger{background:var(--red-soft);color:var(--red)}
+
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  @media(max-width:540px){.row2{grid-template-columns:1fr}}
+  .mini-label{font-size:12px;color:var(--muted);margin-bottom:9px;letter-spacing:.02em}
+  .pill{display:inline-block;font-size:15px;font-weight:600;padding:5px 13px;border-radius:99px}
+  .pill.teal{background:var(--teal-soft);color:var(--teal)}
+  .pill.blue{background:var(--blue-soft);color:var(--blue)}
+  .pill.amber{background:var(--amber-soft);color:var(--amber)}
+  .effort-v{font-size:20px;font-weight:600}
+  .why{font-size:13px;color:var(--muted);margin-top:11px;line-height:1.55}
+
+  .note-title{font-size:13px;font-weight:500;color:var(--muted);display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .note-title .dot{width:6px;height:6px;border-radius:50%;background:var(--teal)}
+  .note-body{font-size:14px;line-height:1.7}
+  .note-body b{font-weight:600}
+  .tips{list-style:none}
+  .tips li{font-size:13.5px;line-height:1.55;padding-left:18px;position:relative;margin-bottom:9px;color:var(--ink)}
+  .tips li:last-child{margin-bottom:0}
+  .tips li::before{content:"";position:absolute;left:2px;top:8px;width:5px;height:5px;border-radius:50%;background:var(--teal)}
+  .tips b{font-weight:600}
+
+  footer{margin-top:26px;font-size:12px;color:var(--muted);line-height:1.6;text-align:center}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">用量策略 · 决策助手</div>
+    <h1>聊几轮该开新窗口?</h1>
+    <p class="sub">先选你现在处于哪个对话模式,再选具体场景——比任务类型更准。</p>
+  </header>
+
+  <div class="panel">
+    <!-- Step 1: 模式 -->
+    <div class="field">
+      <span class="label">现在是哪种对话模式?</span>
+      <div class="mode-tabs">
+        <div class="mode-tab">
+          <input type="radio" name="mode" id="m-explore" value="explore" checked>
+          <label for="m-explore">
+            <span class="mode-icon">🧭</span>
+            <span class="mode-name">探索</span>
+            <span class="mode-desc">边聊边想,不知道终点</span>
+          </label>
+        </div>
+        <div class="mode-tab">
+          <input type="radio" name="mode" id="m-execute" value="execute">
+          <label for="m-execute">
+            <span class="mode-icon">⚡</span>
+            <span class="mode-name">执行</span>
+            <span class="mode-desc">目标明确,直接产出</span>
+          </label>
+        </div>
+        <div class="mode-tab">
+          <input type="radio" name="mode" id="m-iterate" value="iterate">
+          <label for="m-iterate">
+            <span class="mode-icon">🔁</span>
+            <span class="mode-name">迭代</span>
+            <span class="mode-desc">有初版,反复打磨</span>
+          </label>
+        </div>
+        <div class="mode-tab">
+          <input type="radio" name="mode" id="m-query" value="query">
+          <label for="m-query">
+            <span class="mode-icon">🔍</span>
+            <span class="mode-name">查询</span>
+            <span class="mode-desc">要一个答案就够</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Step 2: 具体场景(动态切换) -->
+      <span class="label">具体是做什么?<span class="label-hint">选最接近的</span></span>
+
+      <div id="scenes-explore" class="seg">
+        <input type="radio" name="scene" id="s-e1" value="e-thesis-discuss" checked><label for="s-e1">讨论论文结构/方向</label>
+        <input type="radio" name="scene" id="s-e2" value="e-psychology"><label for="s-e2">心理辅导/思考梳理</label>
+        <input type="radio" name="scene" id="s-e3" value="e-tool-idea"><label for="s-e3">工具/灵感讨论</label>
+        <input type="radio" name="scene" id="s-e4" value="e-concept"><label for="s-e4">搞懂一个概念</label>
+      </div>
+      <div id="scenes-execute" class="seg" style="display:none">
+        <input type="radio" name="scene" id="s-x1" value="x-write-essay"><label for="s-x1">直接写论文/长文</label>
+        <input type="radio" name="scene" id="s-x2" value="x-structured-doc"><label for="s-x2">生成结构化文件(简历等)</label>
+        <input type="radio" name="scene" id="s-x3" value="x-repeat-doc"><label for="s-x3">重复性文件/填表</label>
+      </div>
+      <div id="scenes-iterate" class="seg" style="display:none">
+        <input type="radio" name="scene" id="s-i1" value="i-coding"><label for="s-i1">编程/调bug</label>
+        <input type="radio" name="scene" id="s-i2" value="i-tool-build"><label for="s-i2">做工具(开发阶段)</label>
+        <input type="radio" name="scene" id="s-i3" value="i-revise"><label for="s-i3">修改润色(文章/论文)</label>
+      </div>
+      <div id="scenes-query" class="seg" style="display:none">
+        <input type="radio" name="scene" id="s-q1" value="q-academic"><label for="s-q1">学术/严肃概念</label>
+        <input type="radio" name="scene" id="s-q2" value="q-casual"><label for="s-q2">日常/当搜索引擎用</label>
+        <input type="radio" name="scene" id="s-q3" value="q-claude"><label for="s-q3">关于 Claude 本身</label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="toggle">
+        <input type="checkbox" id="files">
+        <span class="switch"></span>
+        <span class="tlabel">涉及大文件或多份文档</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- 用量同步 -->
+  <div class="sync-panel">
+    <div class="sync-header">
+      <span class="sync-title">📊 同步当前用量</span>
+      <span class="sync-hint">去 Claude 设置 → Usage 看进度条,拖到这里</span>
+    </div>
+    <div class="sync-row">
+      <div>
+        <span class="sync-number" id="pct-display" style="color:var(--teal)">0</span>
+        <span class="sync-pct">%</span>
+      </div>
+      <input type="range" id="usage-slider" class="sync-slider" min="0" max="100" step="1" value="0">
+    </div>
+    <div class="usage-bar-wrap">
+      <div class="usage-bar-track">
+        <div class="usage-bar-fill" id="usage-fill" style="width:0%;background:var(--teal)"></div>
+      </div>
+      <div class="usage-bar-labels">
+        <span>会话额度</span>
+        <span id="remain-label">剩余 100%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主输出 -->
+  <div class="hero">
+    <div class="hero-top">
+      <span class="hero-n" id="turns">—</span>
+      <span class="hero-unit" id="turns-unit">轮</span>
+    </div>
+    <div class="hero-sub" id="turns-sub"></div>
+    <div id="hero-label-wrap"></div>
+    <div class="runway">
+      <div class="track" id="track"></div>
+      <div class="track-legend">
+        <span id="legend-left"><b>当前窗口</b></span>
+        <span><b>换窗口</b></span>
+      </div>
+    </div>
+    <div id="alert-box"></div>
+  </div>
+
+  <div class="row2">
+    <div class="panel" style="margin-bottom:0">
+      <div class="mini-label">推荐模型</div>
+      <span class="pill" id="model-pill"></span>
+      <p class="why" id="model-why"></p>
+    </div>
+    <div class="panel" style="margin-bottom:0">
+      <div class="mini-label">推荐 effort(推理深度)</div>
+      <div class="effort-v" id="effort-v"></div>
+      <p class="why" id="effort-why"></p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="note-title"><span class="dot"></span>窗口建议</div>
+    <div class="note-body" id="window-advice"></div>
+  </div>
+
+  <div class="panel">
+    <div class="note-title"><span class="dot"></span>省额度提示</div>
+    <ul class="tips" id="tips"></ul>
+  </div>
+
+  <footer>
+    数字是经验参考,真实额度因消息长短而浮动。精确进度在 Claude <b>设置 → Usage</b>。<br>
+    五小时额度从当天第一条消息起算,claude.ai / Claude Code / 桌面端共用同一份。
+  </footer>
+</div>
+
+<script>
+(function(){
+  var TRACK_LEN = 16;
+  var PILL_CLS = {'Haiku 4.5':'teal','Sonnet 4.6':'blue','Opus 4.8':'amber'};
+
+  // scene config: base turns, model, effort, win advice, tips extras
+  var SCENES = {
+    'e-thesis-discuss': {
+      base:12, model:'Sonnet 4.6', effort:'medium',
+      mWhy:'讨论方向时来回多,Sonnet 够用且省,Opus 留给真正要深度推理的时候。',
+      eWhy:'结构讨论需要一定思考深度,但不用拉到最高。',
+      win:'这类对话方向可能反复变,<b>前 12 轮</b>保持在同一窗口维持上下文;方向定了之后再考虑换到执行窗口。',
+      tips:['方向还没定清楚时,不要急着让 Claude 开始写——先把结构谈明白再执行,省得反复推翻。']
+    },
+    'e-psychology': {
+      base:14, model:'Sonnet 4.6', effort:'low',
+      mWhy:'心理辅导不需要最强推理,Sonnet 理解情境已经足够,更省额度。',
+      eWhy:'这类对话需要的是倾听和共情,不是大量推理,low effort 最合适。',
+      win:'情感类对话连续性很重要,<b>尽量留在同一窗口</b>;如果一次聊完了,下次重新开始时带一小段背景就够。',
+      tips:['如果有持续的心理辅导需求,用 <b>Projects</b> 存背景信息,不用每次重新交代。']
+    },
+    'e-tool-idea': {
+      base:11, model:'Sonnet 4.6', effort:'medium',
+      mWhy:'灵感讨论阶段不需要 Opus,Sonnet 够用;执行阶段再根据难度升级。',
+      eWhy:'构思需要发散和联想,medium effort 给足空间但不过度。',
+      win:'灵感阶段<b>前 11 轮</b>留在同一窗口;一旦方向定了、进入实际开发,建议<b>开新窗口</b>用迭代模式继续——两个阶段分开,历史更干净。',
+      tips:['灵感讨论和实际开发分两个窗口做,历史更清晰,每轮也更便宜。']
+    },
+    'e-concept': {
+      base:8, model:'Opus 4.8', effort:'high',
+      mWhy:'搞懂一个复杂概念需要精确解释和逐步推导,Opus 在这里最值得。',
+      eWhy:'概念推导需要高质量推理,high effort 保证解释准确不跑偏。',
+      win:'这类对话目标明确——弄懂为止。<b>弄懂了就结束</b>,不要拖着聊其他的;下个问题开新窗口。',
+      tips:['一个窗口只搞一个概念,弄懂再开新的——混在一起历史会越来越贵。']
+    },
+    'x-write-essay': {
+      base:4, model:'Opus 4.8', effort:'high',
+      mWhy:'直接写长文对质量要求高,Opus 产出更好,值得在这里用。',
+      eWhy:'写作质量靠推理深度,high effort 保证内容有逻辑、不空洞。',
+      win:'执行类任务消息少但每条很长。<b>给出结构 → 让 Claude 写 → 你检查修改</b>,尽量在 4 轮内完成;需要大改就开新窗口带着新要求重来。',
+      tips:['写之前把结构和要求一次说清楚——越清楚,一次写成的概率越高,最省额度。']
+    },
+    'x-structured-doc': {
+      base:3, model:'Sonnet 4.6', effort:'low',
+      mWhy:'简历、报告这类结构固定,Sonnet 完全够用,不需要 Opus。',
+      eWhy:'格式化任务不需要深度推理,low effort 最省。',
+      win:'<b>一次给够素材</b>(经历、技能、要求),让 Claude 一次生成;最多 1–2 轮微调。每份文件开一个新窗口,不要混在一起。',
+      tips:['素材越全,一次出稿的概率越高。把所有信息整理好再发,比来回补充省得多。']
+    },
+    'x-repeat-doc': {
+      base:2, model:'Haiku 4.5', effort:'关闭',
+      mWhy:'重复性填表/文件用最省的 Haiku 就够,速度还最快。',
+      eWhy:'不需要任何推理,关掉扩展思考。',
+      win:'这类任务通常<b>一两轮就完事</b>。做完立刻开新窗口,不要攒在一起——每条消息都要重读历史,旧内容拖着白费。',
+      tips:['如果有固定模板,把模板存在 Projects 的说明里,每次直接调用,不用重新描述格式。']
+    },
+    'i-coding': {
+      base:6, model:'Opus 4.8', effort:'high',
+      mWhy:'编程调 bug 需要精确的逻辑推理,Opus 在这里最值。',
+      eWhy:'代码问题需要严密推理,high effort 减少低级错误。',
+      win:'每次发消息都要带上最新代码,历史累积非常快。<b>第 5–6 轮</b>就该让 Claude 总结"当前代码状态+未解决的问题",开新窗口继续。',
+      tips:['每轮只发<b>相关的代码片段</b>,不要粘整个文件——历史越短,每轮越便宜。','遇到新的 bug,开新窗口比在长对话里继续更省。']
+    },
+    'i-tool-build': {
+      base:5, model:'Opus 4.8', effort:'high',
+      mWhy:'做工具的开发阶段需要最强推理能力来保证代码质量。',
+      eWhy:'工具开发对逻辑要求高,high effort 少走弯路。',
+      win:'开发阶段每轮都带着长代码,历史最重。<b>每完成一个功能模块</b>就让 Claude 总结当前代码结构,开新窗口做下一个模块。',
+      tips:['功能拆小做——每个窗口只做一个模块,做完再开新的,比一口气全做更稳。']
+    },
+    'i-revise': {
+      base:7, model:'Sonnet 4.6', effort:'medium',
+      mWhy:'润色修改不需要 Opus,Sonnet 的语言能力已经足够。',
+      eWhy:'修改以语言判断为主,medium effort 够用。',
+      win:'修改类对话前<b>7 轮</b>留在同一窗口保持风格连贯;改完一个完整段落或章节后,开新窗口继续下一段——历史越短,风格越容易保持一致。',
+      tips:['一次只改一个维度(比如先改逻辑,再改语言),比同时要求改所有东西效果更好也更省。']
+    },
+    'q-academic': {
+      base:4, model:'Opus 4.8', effort:'high',
+      mWhy:'学术概念推导对准确性要求高,Opus 在这里最值得。',
+      eWhy:'公式推导/严肃推理需要 high effort 保证正确。',
+      win:'一个问题弄清楚了就结束这个窗口。<b>每个概念/问题开一个新窗口</b>——不要把几个不同的学术问题混在一起问。',
+      tips:['问完一个概念,弄懂后马上开新窗口问下一个——混在一起每轮都要重读无关内容。']
+    },
+    'q-casual': {
+      base:1, model:'Haiku 4.5', effort:'关闭',
+      mWhy:'日常搜索用 Haiku 就够,速度最快、消耗最低。',
+      eWhy:'随手问的问题完全不需要推理,关掉扩展思考。',
+      win:'<b>每个问题开一个新窗口</b>。日常查询都是一次性的,带着旧问题的历史毫无意义,只会浪费额度。',
+      tips:['日常查询不要攒在一个窗口里——每个问题独立开,是这个工具里最省额度的用法。']
+    },
+    'q-claude': {
+      base:2, model:'Sonnet 4.6', effort:'low',
+      mWhy:'问关于 Claude 的问题用 Sonnet 就够,Haiku 有时候对自身能力的描述不够准确。',
+      eWhy:'不需要深度推理,low effort 足矣。',
+      win:'问清楚了就换窗口。关于 Claude 的问题通常<b>1–2 轮</b>就能有答案,不需要长对话。',
+      tips:['问 Claude 关于自身限制的问题,结合官方文档核对——Claude 对自己的描述有时候会不准确。']
+    }
+  };
+
+  // default first scene per mode
+  var MODE_DEFAULT = {explore:'e-thesis-discuss', execute:'x-write-essay', iterate:'i-coding', query:'q-academic'};
+
+  function checkedVal(name){
+    var el = document.querySelector('input[name="'+name+'"]:checked');
+    return el ? el.value : null;
+  }
+
+  function switchMode(mode){
+    ['explore','execute','iterate','query'].forEach(function(m){
+      var el = document.getElementById('scenes-'+m);
+      if(el) el.style.display = (m===mode) ? 'flex' : 'none';
+    });
+    // select default scene for this mode
+    var def = MODE_DEFAULT[mode];
+    if(def){
+      var el = document.getElementById('s-'+def.split('-').slice(1).join('-'));
+      // simpler: find by value
+      var radio = document.querySelector('input[name="scene"][value="'+def+'"]');
+      if(radio) radio.checked = true;
+    }
+    render();
+  }
+
+  function compute(){
+    var scene = checkedVal('scene') || 'e-thesis-discuss';
+    var files = document.getElementById('files').checked;
+    var usedPct = parseInt(document.getElementById('usage-slider').value, 10);
+    var remainPct = 100 - usedPct;
+
+    var cfg = SCENES[scene] || SCENES['e-thesis-discuss'];
+    var base = Math.max(1, Math.round(cfg.base * (files ? 0.65 : 1)));
+
+    var actual = (usedPct === 0) ? null : Math.max(0, Math.round(base * remainPct / 100));
+
+    var urgency = 'ok';
+    if(usedPct >= 85) urgency = 'danger';
+    else if(usedPct >= 60) urgency = 'warn';
+
+    var tips = [cfg.tips[0]];
+    if(cfg.tips[1]) tips.push(cfg.tips[1]);
+    if(usedPct > 0) tips.push('额度一紧,主动让 Claude <b>总结当前进度</b>再换窗口,别等到被强制重置。');
+    tips.push('所有 Claude 入口(网页 / Claude Code / 桌面端)<b>共用同一份额度</b>,别忘了算上。');
+
+    var win = cfg.win;
+    if(files) win += '<br><br>涉及多份文档时,改用 <b>Projects(项目)</b>:文件会被缓存,每次只读相关部分,能让你多撑几轮。';
+
+    return {base:base, actual:actual, usedPct:usedPct, remainPct:remainPct,
+            urgency:urgency, model:cfg.model, mWhy:cfg.mWhy,
+            effort:cfg.effort, eWhy:cfg.eWhy, win:win, tips:tips};
+  }
+
+  function colorFor(u){ return u==='danger'?'var(--red)':u==='warn'?'var(--amber)':'var(--teal)' }
+
+  function buildTrack(r){
+    var t = document.getElementById('track');
+    t.innerHTML='';
+    var usedTicks = r.usedPct===0 ? 0 : Math.round(TRACK_LEN * r.usedPct/100);
+    var displayN = r.actual!==null ? r.actual : r.base;
+    var remainTicks = TRACK_LEN - usedTicks;
+    var onTicks = Math.min(remainTicks, Math.round(remainTicks * displayN / Math.max(r.base,1)));
+    var cutAt = usedTicks + onTicks;
+    for(var i=0;i<TRACK_LEN;i++){
+      var d=document.createElement('div'); d.className='tick';
+      if(i<usedTicks) d.className+=' done';
+      else if(i<cutAt) d.className+=(r.urgency==='danger'?' danger':r.urgency==='warn'?' warn':' on');
+      else if(i===cutAt&&i<TRACK_LEN) d.className+=(r.urgency==='danger'?' cut danger-cut':' cut');
+      t.appendChild(d);
+    }
+    document.getElementById('legend-left').innerHTML =
+      r.usedPct>0 ? '<b>已用 '+r.usedPct+'%</b> · 剩余空间' : '<b>当前窗口</b>';
+  }
+
+  function render(){
+    var r = compute();
+    // sync bar
+    document.getElementById('pct-display').textContent = r.usedPct;
+    document.getElementById('pct-display').style.color = colorFor(r.urgency);
+    document.getElementById('remain-label').textContent = '剩余 '+r.remainPct+'%';
+    var fill=document.getElementById('usage-fill');
+    fill.style.width=r.usedPct+'%'; fill.style.background=colorFor(r.urgency);
+
+    // hero
+    var displayN = r.actual!==null ? r.actual : r.base;
+    document.getElementById('turns').textContent = displayN;
+    document.getElementById('turns').style.color = colorFor(r.urgency);
+    document.getElementById('turns-unit').textContent = '轮'+(r.actual===null?'左右':'');
+    document.getElementById('turns-sub').textContent = r.actual!==null
+      ? '按当前剩余 '+r.remainPct+'% 额度估算 · 理论建议 '+r.base+' 轮'
+      : '理论推荐值 · 同步用量后可得到实际剩余轮数';
+
+    var lw=document.getElementById('hero-label-wrap');
+    if(r.actual!==null){
+      var txt=r.urgency==='danger'?'⚠️ 额度紧张,建议马上总结并换窗口'
+             :r.urgency==='warn'?'注意:额度过半,提前想好切换时机'
+             :'额度充足,按计划继续';
+      var cls=r.urgency==='danger'?'alert-danger':r.urgency==='warn'?'alert-warn':'alert-ok';
+      lw.innerHTML='<div class="alert-box '+cls+'">'+txt+'</div>';
+    } else { lw.innerHTML=''; }
+
+    buildTrack(r);
+
+    var pill=document.getElementById('model-pill');
+    pill.textContent=r.model; pill.className='pill '+(PILL_CLS[r.model]||'blue');
+    document.getElementById('model-why').textContent=r.mWhy;
+    document.getElementById('effort-v').textContent=r.effort;
+    document.getElementById('effort-why').textContent=r.eWhy;
+    document.getElementById('window-advice').innerHTML=r.win;
+
+    var ul=document.getElementById('tips'); ul.innerHTML='';
+    r.tips.forEach(function(tip){ var li=document.createElement('li'); li.innerHTML=tip; ul.appendChild(li); });
+  }
+
+  // mode switching
+  document.querySelectorAll('input[name="mode"]').forEach(function(el){
+    el.addEventListener('change', function(){ switchMode(el.value); });
+  });
+  document.querySelectorAll('input[name="scene"], input[type=checkbox]').forEach(function(el){
+    el.addEventListener('change', render);
+  });
+  document.getElementById('usage-slider').addEventListener('input', render);
+
+  // init
+  switchMode('explore');
+})();
+</script>
+</body>
+</html>
