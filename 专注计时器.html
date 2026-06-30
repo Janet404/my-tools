@@ -209,6 +209,11 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
         </button>
         <div id="taskPanelBody" style="padding:8px 0">
           <div id="aiTaskList"></div>
+          <div style="padding:6px 12px 2px;border-top:1px solid var(--border);margin-top:4px">
+            <button onclick="askAnotherBatch()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:4px 0;display:inline-flex;align-items:center;gap:4px" onmouseover="this.style.color='var(--text2)'" onmouseout="this.style.color='var(--text3)'">
+              <i class="ti ti-plus" style="font-size:13px"></i>有别的任务要拆
+            </button>
+          </div>
         </div>
       </div>
 
@@ -252,42 +257,43 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       <circle id="ringFill" cx="85" cy="85" r="78" fill="none" stroke="var(--text)" stroke-width="6"
         stroke-linecap="round" stroke-dasharray="490.1" stroke-dashoffset="490.1" transform="rotate(-90 85 85)"/>
       <text x="85" y="81" text-anchor="middle" font-size="40" font-weight="600" fill="var(--text)" id="timerText">30:00</text>
-      <text x="85" y="102" text-anchor="middle" font-size="12" fill="var(--text3)">剩余</text>
+      <text x="85" y="102" text-anchor="middle" font-size="12" fill="var(--text3)" id="timerSubLabel">剩余</text>
     </svg>
   </div>
   <div class="end-row">计划结束：<strong id="timerEndLabel" style="color:var(--text)">—</strong></div>
+  <div id="overtimeBuffer" class="notice" style="display:none;text-align:center">
+    时间到了！<strong id="bufferCountdown">8</strong> 秒后自动继续正计时
+    <div style="margin-top:.7rem">
+      <button class="btn-primary" onclick="endRoundFromBuffer()">结束本轮 →</button>
+    </div>
+  </div>
   <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
     <button class="btn-ghost" id="pauseBtn" onclick="togglePause()">暂停</button>
-    <button class="btn-ghost" onclick="earlyFinish()" style="color:var(--green-text);border-color:var(--green-border)">提前完成</button>
-    <button class="btn-ghost" onclick="skipToFeedback()" style="color:var(--red-text);border-color:var(--red-border)">时间到 →</button>
+    <button class="btn-ghost" id="earlyBtn" onclick="earlyFinish()" style="color:var(--green-text);border-color:var(--green-border)">提前结束</button>
+    <button class="btn-ghost" id="overtimeStopBtn" onclick="stopOvertime()" style="color:var(--red-text);border-color:var(--red-border);display:none">时间到 →</button>
   </div>
 </div>
 
 <!-- ── EARLY FINISH ── -->
 <div id="phaseEarly" class="phase">
   <div class="cur-card" style="margin-bottom:1.25rem">
-    <span class="label-xs">已完成</span>
+    <span class="label-xs">本轮任务</span>
     <div id="earlyTaskLabel" style="font-size:15px;line-height:1.5;margin-top:2px"></div>
   </div>
   <div class="card">
-    <div style="font-size:16px;font-weight:600;margin-bottom:.9rem">提前完成，实际结束时间？</div>
-    <div class="time-row" style="margin-bottom:0">
-      <div class="time-pill">
-        <label>完成于</label>
-        <input type="time" id="earlyEndInput">
-      </div>
-    </div>
-    <hr>
-    <div style="font-size:14px;color:var(--text2);margin-bottom:.7rem">接下来？</div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:.9rem">提前结束，接下来？</div>
     <div class="choice-row">
       <button class="choice-btn" id="choiceNext" onclick="selectChoice('next')">
-        <i class="ti ti-arrow-right"></i>继续下一个任务
+        <i class="ti ti-arrow-right"></i>下一个任务
+      </button>
+      <button class="choice-btn" id="choiceDone" onclick="selectChoice('done')">
+        <i class="ti ti-check"></i><span id="choiceDoneLabel">已经完成！</span>
+      </button>
+      <button class="choice-btn" id="choicePartial" onclick="selectChoice('partial')">
+        <i class="ti ti-progress"></i>未完成
       </button>
       <button class="choice-btn" id="choiceRest" onclick="selectChoice('rest')">
         <i class="ti ti-coffee"></i>休息到时间段结束
-      </button>
-      <button class="choice-btn" id="choiceEnd" onclick="selectChoice('end')">
-        <i class="ti ti-check"></i>直接结束今日
       </button>
     </div>
     <div style="margin-top:1rem;text-align:right">
@@ -320,10 +326,12 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   </div>
   <div style="font-size:17px;font-weight:600;margin-bottom:1rem">完成得怎么样？</div>
   <div class="card">
+    <div id="doneBtnWrap">
     <button class="btn-done" onclick="markDone()">
       <div class="icon"><i class="ti ti-check"></i></div>
       <span style="font-size:15px;font-weight:600">全部完成 ✓</span>
     </button>
+    </div>
     <div style="border-top:1px solid var(--border);padding-top:.9rem">
       <div style="font-size:13px;color:var(--text2);margin-bottom:10px">没做完——大约完成了：</div>
       <div class="slider-row">
@@ -355,6 +363,14 @@ let timeLeft=DURATION,timerInterval=null,restInterval=null;
 let isPaused=false,currentTask='',history=[],sessionCount=0;
 let lastUnfinishedTask=null,sessionEndTime=null,earlyChoice=null,sessionStartTime=null;
 let deadlineTs=null,pausedTimeLeft=null; // 方案一：时间戳计时
+
+// ── 超时（正计时）相关 ──
+let timerMode='down';            // 'down' 倒计时 | 'buffer' 8秒缓冲 | 'up' 正计时
+let bufferInterval=null,bufferLeft=8;
+let overtimeBaseSec=0,overtimeSegStart=null; // 正计时累计 + 当前运行段起点
+let currentBlocks=1;             // 本轮结算时写入 history 的方块数
+let earlyEndTime=null;           // 提前结束时自动捕获的时刻
+let feedbackContext='normal';    // 'normal' | 'earlyPlan' | 'earlyAI'
 
 const taskInput=document.getElementById('taskInput');
 
@@ -399,6 +415,13 @@ function startSession(){
   sessionCount++;timeLeft=DURATION;isPaused=false;
   deadlineTs=Date.now()+DURATION*1000; // 方案一：记录目标结束时间戳
   pausedTimeLeft=null;
+  timerMode='down';overtimeBaseSec=0;overtimeSegStart=null;currentBlocks=1;
+  clearInterval(bufferInterval);
+  document.getElementById('overtimeBuffer').style.display='none';
+  document.getElementById('earlyBtn').style.display='';
+  document.getElementById('overtimeStopBtn').style.display='none';
+  document.getElementById('pauseBtn').style.display='';
+  document.getElementById('timerSubLabel').textContent='剩余';
   sessionStartTime=document.getElementById('startTimeInput').value;
   updateEndTime();
   document.getElementById('timerTaskLabel').textContent=currentTask;
@@ -412,58 +435,231 @@ function startSession(){
 
 function tick(){
   if(isPaused)return;
-  // 方案一：每次都从时间戳差值算剩余，后台节流也能回来自动追上
-  timeLeft=Math.max(0,Math.round((deadlineTs-Date.now())/1000));
-  updateTimerDisplay();updateRing();
-  if(timeLeft<=0){clearInterval(timerInterval);goToFeedback();}
+  if(timerMode==='down'){
+    // 方案一：每次都从时间戳差值算剩余，后台节流也能回来自动追上
+    timeLeft=Math.max(0,Math.round((deadlineTs-Date.now())/1000));
+    updateTimerDisplay();updateRing();
+    if(timeLeft<=0){clearInterval(timerInterval);enterBuffer();}
+  } else if(timerMode==='up'){
+    updateTimerDisplay();
+  }
 }
+
+// ── 倒计时归零：8 秒缓冲，什么都不点则自动转正计时 ──
+function enterBuffer(){
+  timerMode='buffer';bufferLeft=8;
+  document.getElementById('pauseBtn').style.display='none';
+  document.getElementById('earlyBtn').style.display='none';
+  document.getElementById('overtimeStopBtn').style.display='none';
+  document.getElementById('timerSubLabel').textContent='已到时';
+  document.getElementById('timerText').textContent='00:00';
+  updateRing();
+  const banner=document.getElementById('overtimeBuffer');
+  banner.style.display='block';
+  document.getElementById('bufferCountdown').textContent=bufferLeft;
+  clearInterval(bufferInterval);
+  bufferInterval=setInterval(()=>{
+    bufferLeft--;
+    document.getElementById('bufferCountdown').textContent=Math.max(0,bufferLeft);
+    if(bufferLeft<=0){clearInterval(bufferInterval);enterOvertime();}
+  },1000);
+}
+
+// 缓冲期内点「结束本轮」：按整 30 分钟结算
+function endRoundFromBuffer(){
+  clearInterval(bufferInterval);clearInterval(timerInterval);
+  document.getElementById('overtimeBuffer').style.display='none';
+  currentBlocks=1;
+  goToFeedback('normal');
+}
+
+// 进入正计时
+function enterOvertime(){
+  timerMode='up';isPaused=false;
+  overtimeBaseSec=0;overtimeSegStart=Date.now();
+  document.getElementById('overtimeBuffer').style.display='none';
+  document.getElementById('pauseBtn').style.display='';
+  document.getElementById('pauseBtn').textContent='暂停';
+  document.getElementById('earlyBtn').style.display='none';
+  document.getElementById('overtimeStopBtn').style.display='';
+  document.getElementById('timerSubLabel').textContent='已超时';
+  clearInterval(timerInterval);
+  timerInterval=setInterval(tick,1000);
+  updateTimerDisplay();
+}
+
+function overtimeSec(){
+  return overtimeBaseSec+(isPaused?0:(Date.now()-overtimeSegStart)/1000);
+}
+
+// 正计时阶段点「时间到」：结算，总时长 = 30 + 正计时
+function stopOvertime(){
+  clearInterval(timerInterval);
+  const total=DURATION+overtimeSec();
+  currentBlocks=total/DURATION; // 30分=1块，零头按比例
+  goToFeedback('normal');
+}
+
 function togglePause(){
   isPaused=!isPaused;
-  if(isPaused){
-    // 暂停：保存当前剩余秒数
-    pausedTimeLeft=Math.max(0,Math.round((deadlineTs-Date.now())/1000));
+  if(timerMode==='up'){
+    if(isPaused){
+      overtimeBaseSec+=(Date.now()-overtimeSegStart)/1000;
+    } else {
+      overtimeSegStart=Date.now();
+    }
   } else {
-    // 继续：用剩余秒数重新算 deadline，相当于把终点往后推
-    deadlineTs=Date.now()+pausedTimeLeft*1000;
-    pausedTimeLeft=null;
+    if(isPaused){
+      // 暂停：保存当前剩余秒数
+      pausedTimeLeft=Math.max(0,Math.round((deadlineTs-Date.now())/1000));
+    } else {
+      // 继续：用剩余秒数重新算 deadline，相当于把终点往后推
+      deadlineTs=Date.now()+pausedTimeLeft*1000;
+      pausedTimeLeft=null;
+    }
   }
   document.getElementById('pauseBtn').textContent=isPaused?'继续':'暂停';
 }
-function skipToFeedback(){clearInterval(timerInterval);goToFeedback();}
-function goToFeedback(){document.getElementById('feedbackTaskLabel').textContent=currentTask;showPhase('phaseFeedback');}
+
+function goToFeedback(ctx){
+  feedbackContext=ctx||'normal';
+  document.getElementById('feedbackTaskLabel').textContent=currentTask;
+  // 'normal' 显示「全部完成」；提前结束-未完成 只显示进度条
+  document.getElementById('doneBtnWrap').style.display=feedbackContext==='normal'?'block':'none';
+  showPhase('phaseFeedback');
+}
 
 function earlyFinish(){
-  clearInterval(timerInterval);
-  document.getElementById('earlyTaskLabel').textContent=currentTask;
+  clearInterval(timerInterval);clearInterval(bufferInterval);
+  // 自动捕获当前时刻作为结束时间，不再手填
   const n=new Date();
-  document.getElementById('earlyEndInput').value=fmt(n.getHours())+':'+fmt(n.getMinutes());
+  earlyEndTime=fmt(n.getHours())+':'+fmt(n.getMinutes());
+  document.getElementById('earlyTaskLabel').textContent=currentTask;
   earlyChoice=null;
-  document.getElementById('choiceNext').classList.remove('selected');
-  document.getElementById('choiceRest').classList.remove('selected');
+  ['choiceNext','choiceDone','choicePartial','choiceRest'].forEach(id=>document.getElementById(id).classList.remove('selected'));
   document.getElementById('earlyConfirmBtn').disabled=true;
+  // 按模式显隐：懒蛋人类没有「下一个任务」，完成按钮文案改「完成！」
+  const isAI=currentTab==='ai';
+  document.getElementById('choiceNext').style.display=isAI?'none':'';
+  document.getElementById('choiceDoneLabel').textContent=isAI?'完成！':'已经完成！';
   showPhase('phaseEarly');
 }
 
 function selectChoice(c){
   earlyChoice=c;
-  document.getElementById('choiceNext').classList.toggle('selected',c==='next');
-  document.getElementById('choiceRest').classList.toggle('selected',c==='rest');
-  document.getElementById('choiceEnd').classList.toggle('selected',c==='end');
+  ['next','done','partial','rest'].forEach(v=>{
+    const el=document.getElementById('choice'+v.charAt(0).toUpperCase()+v.slice(1));
+    if(el)el.classList.toggle('selected',c===v);
+  });
   document.getElementById('earlyConfirmBtn').disabled=false;
 }
 
 function confirmEarlyChoice(){
-  const actualEnd=document.getElementById('earlyEndInput').value||fmt(new Date().getHours())+':'+fmt(new Date().getMinutes());
+  const isAI=currentTab==='ai';
   const thisRoundEnd=sessionStartTime?addMins(sessionStartTime,30):sessionEndTime;
-  history.push({task:currentTask,pct:100,done:true,session:sessionCount,startTime:sessionStartTime,endTime:actualEnd,early:true});
+
+  if(earlyChoice==='partial'){
+    // 进进度条页（无「全部完成」按钮）；记录在进度确认时写入
+    goToFeedback(isAI?'earlyAI':'earlyPlan');
+    return;
+  }
+
+  // next / done / rest 都算作「该段已完成」，提前结束 → 半块；mins 记真实耗时
+  const earlyMins=sessionStartTime?timeDiffMins(sessionStartTime,earlyEndTime):0;
+  history.push({task:currentTask,pct:100,done:true,session:sessionCount,startTime:sessionStartTime,endTime:earlyEndTime,early:true,blocks:0.5,mins:earlyMins});
   lastUnfinishedTask=null;
+
   if(earlyChoice==='rest'){
-    startRest(actualEnd,thisRoundEnd);
-  } else if(earlyChoice==='end'){
-    renderHistory();
-    showPhase('phaseSetup');
+    if(isAI)markAIComplete();
+    startRest(earlyEndTime,thisRoundEnd);
+  } else if(earlyChoice==='done'){
+    if(isAI){
+      markAIComplete();
+      returnToAIList(earlyEndTime,true);
+    } else {
+      // 已经完成！直接入统计，回设置页，输入框清空
+      finishToSetup(earlyEndTime,'');
+    }
+  } else { // 'next'（仅我有计划）
+    finishToSetup(earlyEndTime,'');
+  }
+}
+
+// 提前结束后回到设置页（我有计划）
+function finishToSetup(newStart,fillText){
+  taskInput.value=fillText||'';
+  document.getElementById('carryNotice').style.display=fillText?'flex':'none';
+  document.getElementById('progressSlider').value=50;
+  document.getElementById('sliderPct').textContent='50%';
+  if(newStart){
+    document.getElementById('startTimeInput').value=newStart;
+    document.getElementById('startTimeInputAI').value=newStart;
+  }
+  updateEndTime();
+  const l=taskInput.value.trim().length;
+  document.getElementById('charCount').textContent=l+' 字';
+  document.getElementById('startBtn').disabled=l===0;
+  renderHistory();
+  if(currentTab!=='plan')switchTab('plan');
+  showPhase('phaseSetup');
+  taskInput.focus();
+  taskInput.setSelectionRange(taskInput.value.length,taskInput.value.length);
+}
+
+// 提前结束后回到 AI 任务列表（懒蛋人类），用户自己挑下一个
+// 找下一条「未完成」的任务索引：先从 after 之后找，找不到再从头找
+function nextPendingIndex(after){
+  const n=aiTasks.length;
+  for(let k=1;k<=n;k++){
+    const i=((after==null?-1:after)+k)%n;
+    if(!completedAITasks.has(i))return i;
+  }
+  return -1;
+}
+
+function returnToAIList(newStart,autoNext){
+  if(newStart){
+    document.getElementById('startTimeInput').value=newStart;
+    document.getElementById('startTimeInputAI').value=newStart;
+  }
+  updateEndTime();updateEndTimeAI();
+  editingAITaskIndex=null;
+  if(autoNext){
+    const j=nextPendingIndex(runningAITaskIndex);
+    if(j>=0){
+      aiTaskIndex=j;
+      editingAITaskIndex=j; // 自动填充并可编辑（改字同步列表）
+      document.getElementById('aiGoalInput').value=aiTasks[j];
+      document.getElementById('aiStartBtn').style.display='inline-block';
+    } else {
+      aiTaskIndex=-1;
+      document.getElementById('aiGoalInput').value='';
+      document.getElementById('aiStartBtn').style.display='none';
+    }
   } else {
-    prepareNextTask(actualEnd);
+    aiTaskIndex=-1; // 不预选，等用户自己挑
+    document.getElementById('aiGoalInput').value='';
+    document.getElementById('aiStartBtn').style.display='none';
+  }
+  renderAITaskList();
+  renderHistory();
+  if(currentTab!=='ai')switchTab('ai');
+  showPhase('phaseSetup');
+}
+
+// 把当前运行的 AI 任务标记为完成（删除线），移出进行中
+function markAIComplete(){
+  if(runningAITaskIndex!=null){
+    completedAITasks.add(runningAITaskIndex);
+    inProgressAITasks.delete(runningAITaskIndex);
+    renderAITaskList();
+  }
+}
+// 把当前运行的 AI 任务标记为进行中（未完成，可多个并存）
+function markAIInProgress(){
+  if(runningAITaskIndex!=null && !completedAITasks.has(runningAITaskIndex)){
+    inProgressAITasks.add(runningAITaskIndex);
+    renderAITaskList();
   }
 }
 
@@ -490,7 +686,12 @@ function startRest(earlyEnd,restEnd){
   upd();restInterval=setInterval(upd,1000);
   showPhase('phaseRest');
 }
-function endRest(restEnd){clearInterval(restInterval);prepareNextTask(restEnd||sessionEndTime);}
+function endRest(restEnd){
+  clearInterval(restInterval);
+  const t=restEnd||sessionEndTime;
+  if(currentTab==='ai')returnToAIList(t,true);
+  else finishToSetup(t,'');
+}
 
 function prepareNextTask(newStart){
   taskInput.value='';
@@ -510,6 +711,11 @@ function prepareNextTask(newStart){
 }
 
 function updateTimerDisplay(){
+  if(timerMode==='up'){
+    const t=Math.floor(overtimeSec());
+    document.getElementById('timerText').textContent='+'+fmt(Math.floor(t/60))+':'+fmt(t%60);
+    return;
+  }
   const m=Math.floor(timeLeft/60),s=timeLeft%60;
   document.getElementById('timerText').textContent=fmt(m)+':'+fmt(s);
 }
@@ -529,51 +735,59 @@ function updateSessionDots(){
 function updateSlider(v){document.getElementById('sliderPct').textContent=v+'%';}
 
 function markDone(){
-  history.push({task:currentTask,pct:100,done:true,session:sessionCount,startTime:sessionStartTime,endTime:sessionEndTime});
-  // 标记对应的AI任务为已完成
-  if(aiTasks.length&&aiTasks[aiTaskIndex]===currentTask){
-    completedAITasks.add(aiTaskIndex);
-    renderAITaskList();
+  // 只在 normal 上下文可达（提前结束-未完成时此按钮隐藏）；mins = currentBlocks*30（含超时）
+  history.push({task:currentTask,pct:100,done:true,session:sessionCount,startTime:sessionStartTime,endTime:sessionEndTime,blocks:currentBlocks,mins:Math.round(currentBlocks*30)});
+  lastUnfinishedTask=null;
+  if(currentTab==='ai'){
+    markAIComplete();
+    returnToAIList(sessionEndTime,true);
+  } else {
+    finishRoundPlan(false);
   }
-  lastUnfinishedTask=null;finishRound(false);
 }
 function markPartial(){
   const pct=parseInt(document.getElementById('progressSlider').value);
-  history.push({task:currentTask,pct,done:false,session:sessionCount,startTime:sessionStartTime,endTime:sessionEndTime});
-  lastUnfinishedTask=currentTask;finishRound(true);
+  if(feedbackContext==='earlyPlan'){
+    const m=sessionStartTime?timeDiffMins(sessionStartTime,earlyEndTime):0;
+    history.push({task:currentTask,pct,done:false,session:sessionCount,startTime:sessionStartTime,endTime:earlyEndTime,early:true,blocks:0.5,mins:m});
+    lastUnfinishedTask=currentTask;
+    finishToSetup(earlyEndTime,currentTask); // 自动回填同样文本
+    return;
+  }
+  if(feedbackContext==='earlyAI'){
+    const m=sessionStartTime?timeDiffMins(sessionStartTime,earlyEndTime):0;
+    history.push({task:currentTask,pct,done:false,session:sessionCount,startTime:sessionStartTime,endTime:earlyEndTime,early:true,blocks:0.5,mins:m});
+    markAIInProgress();
+    returnToAIList(earlyEndTime,false); // 未完成 → 用户自己挑下一个
+    return;
+  }
+  // normal
+  history.push({task:currentTask,pct,done:false,session:sessionCount,startTime:sessionStartTime,endTime:sessionEndTime,blocks:currentBlocks,mins:Math.round(currentBlocks*30)});
+  if(currentTab==='ai'){
+    markAIInProgress();
+    returnToAIList(sessionEndTime,false); // 未完成 → 用户自己挑下一个
+  } else {
+    lastUnfinishedTask=currentTask;
+    finishRoundPlan(true);
+  }
 }
-function finishRound(carry){
+function finishRoundPlan(carry){
   document.getElementById('progressSlider').value=50;
   document.getElementById('sliderPct').textContent='50%';
   const notice=document.getElementById('carryNotice');
-
-  // AI模式：推进任务队列
-  if(aiTasks.length&&!carry){
-    const next=advanceAITask();
-    if(next){
-      showAICurrentTask(next);
-      // 如果当前在懒蛋人类模式，留在那里；否则填入输入框
-      if(currentTab==='plan'){
-        taskInput.value=next;
-        notice.style.display='none';
-      }
-    } else {
-      taskInput.value='';
-      notice.style.display='none';
-    }
-  } else if(carry&&lastUnfinishedTask){
+  if(carry&&lastUnfinishedTask){
     taskInput.value=lastUnfinishedTask;
     notice.style.display='flex';
   } else {
     taskInput.value='';
     notice.style.display='none';
   }
-
   const l=taskInput.value.trim().length;
   document.getElementById('charCount').textContent=l+' 字';
   document.getElementById('startBtn').disabled=l===0;
   if(sessionEndTime)document.getElementById('startTimeInput').value=sessionEndTime;
   updateEndTime();renderHistory();
+  if(currentTab!=='plan')switchTab('plan');
   showPhase('phaseSetup');
   taskInput.focus();
   taskInput.setSelectionRange(taskInput.value.length,taskInput.value.length);
@@ -622,15 +836,16 @@ function renderHistory(){
   if(history.length===0){sec.style.display='none';return;}
   sec.style.display='block';
   const done=history.filter(h=>h.done).length;
-  document.getElementById('histSummary').textContent=done+' 完成 / '+history.length+' 轮';
+  document.getElementById('histSummary').textContent=done+' 完成 / '+history.length+' 轮 · 专注约 '+totalFocusMins()+' 分钟';
 
   // 合并同名跨轮任务为事件（同 buildEvents 逻辑，但按时间正序）
   const evts=[];
   history.forEach(item=>{
+    const b=item.blocks!=null?item.blocks:(item.early?0.5:1);
     const last=evts[evts.length-1];
     if(last&&last.name===item.task.trim()){
       last.endTime=item.endTime||last.endTime;
-      last.blocks+=item.early?0.5:1;
+      last.blocks+=b;
       last.allDone=last.allDone&&item.done;
       last.early=last.early||(item.early||false);
       last.lastPct=item.done?100:item.pct;
@@ -639,7 +854,7 @@ function renderHistory(){
         name:item.task.trim(),
         startTime:item.startTime||'',
         endTime:item.endTime||'',
-        blocks:item.early?0.5:1,
+        blocks:b,
         allDone:item.done,
         early:item.early||false,
         lastPct:item.done?100:item.pct,
@@ -682,8 +897,17 @@ function openReset(){
 }
 function closeReset(){document.getElementById('resetModal').classList.remove('show');}
 function doReset(){
-  clearInterval(timerInterval);clearInterval(restInterval);
+  clearInterval(timerInterval);clearInterval(restInterval);clearInterval(bufferInterval);
   history=[];sessionCount=0;lastUnfinishedTask=null;currentTask='';
+  timerMode='down';overtimeBaseSec=0;overtimeSegStart=null;currentBlocks=1;isPaused=false;
+  aiTasks=[];aiTaskIndex=0;completedAITasks=new Set();inProgressAITasks=new Set();
+  editingAITaskIndex=null;runningAITaskIndex=null;appendMode=false;aiConversation=[];
+  document.getElementById('aiTaskPanel').style.display='none';
+  document.getElementById('aiTaskList').innerHTML='';
+  document.getElementById('aiGoalInput').value='';
+  document.getElementById('aiStartBtn').style.display='none';
+  document.getElementById('aiStatus').textContent='';
+  document.getElementById('overtimeBuffer').style.display='none';
   taskInput.value='';
   document.getElementById('charCount').textContent='0 字';
   document.getElementById('startBtn').disabled=true;
@@ -701,6 +925,7 @@ function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g
 function buildEvents(){
   const events=[];
   history.forEach(item=>{
+    const b=item.blocks!=null?item.blocks:(item.early?(item.earlyFill||0.5):1);
     const last=events[events.length-1];
     const name=item.task.trim();
     if(last && last.name===name){
@@ -710,7 +935,7 @@ function buildEvents(){
       last.totalPct=(last.totalPct||100)+( item.done?100:item.pct );
       last.allDone=last.allDone&&item.done;
       last.anyEarly=last.anyEarly||(item.early||false);
-      last.blocks+=item.early?(item.earlyFill||0.5):1;
+      last.blocks+=b;
     } else {
       events.push({
         name,
@@ -719,7 +944,7 @@ function buildEvents(){
         sessions:[item],
         allDone: item.done,
         anyEarly: item.early||false,
-        blocks: item.early?(item.earlyFill||0.5):1,
+        blocks: b,
       });
     }
   });
@@ -729,6 +954,15 @@ function buildEvents(){
 function todayStr(){
   const d=new Date();
   return d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日';
+}
+
+// 真实专注分钟总和（含超时、含提前结束的实际时长）；旧记录无 mins 时回退
+function totalFocusMins(){
+  return Math.round(history.reduce((s,it)=>{
+    let m=it.mins;
+    if(m==null)m=it.blocks!=null?it.blocks*30:(it.early?15:30);
+    return s+m;
+  },0));
 }
 
 function statusLabel(ev){
@@ -772,7 +1006,7 @@ function exportTxt(){
   const events=buildEvents();
   const done=history.filter(h=>h.done).length;
   const total=history.length;
-  const mins=total*30;
+  const mins=totalFocusMins();
   const date=todayStr();
 
   let rows='';
@@ -810,7 +1044,7 @@ function exportVis(){
   const events=buildEvents();
   const done=history.filter(h=>h.done).length;
   const total=history.length;
-  const mins=total*30;
+  const mins=totalFocusMins();
   const date=todayStr();
   const maxBlocks=Math.max(...events.map(e=>e.blocks));
   const totalCols=Math.ceil(maxBlocks);
@@ -925,7 +1159,11 @@ function resetToNowAI(){
 let aiTasks=[];
 let aiTaskIndex=0;
 let taskPanelOpen=true;
-let completedAITasks=new Set(); // 记录已完成的任务索引
+let completedAITasks=new Set(); // 已完成（删除线）的任务索引
+let inProgressAITasks=new Set(); // 进行中的任务索引（可多个并存）
+let editingAITaskIndex=null;     // 当前正在输入框里编辑的任务索引
+let runningAITaskIndex=null;     // 本轮计时对应的任务索引
+let appendMode=false;            // 「有别的任务要拆」：下次拆解结果追加到列表末尾
 
 function toggleTaskPanel(){
   taskPanelOpen=!taskPanelOpen;
@@ -935,25 +1173,26 @@ function toggleTaskPanel(){
 
 function renderAITaskList(){
   const list=document.getElementById('aiTaskList');
-  const remaining=aiTasks.slice(aiTaskIndex);
-  document.getElementById('taskPanelLabel').textContent='待办任务 '+remaining.length+' 项';
+  const remaining=aiTasks.filter((t,i)=>!completedAITasks.has(i)).length;
+  document.getElementById('taskPanelLabel').textContent='待办任务 '+remaining+' 项';
   list.innerHTML='';
   aiTasks.forEach((t,i)=>{
     const done=completedAITasks.has(i);
-    const current=i===aiTaskIndex;
+    const inProg=!done&&inProgressAITasks.has(i);
+    const selected=i===aiTaskIndex;
     const div=document.createElement('div');
-    div.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;transition:background .12s;'+(current?'background:var(--bg3)':'');
-    div.onmouseover=()=>{if(!current)div.style.background='var(--bg2)';};
-    div.onmouseout=()=>{if(!current)div.style.background='';};
+    div.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;transition:background .12s;'+(selected?'background:var(--bg3)':'');
+    div.onmouseover=()=>{if(!selected)div.style.background='var(--bg2)';};
+    div.onmouseout=()=>{if(!selected)div.style.background='';};
     div.onclick=()=>selectAITask(i);
     const idx=document.createElement('span');
     idx.style.cssText='font-size:11px;color:var(--text3);flex-shrink:0;width:16px;text-align:right';
     idx.textContent=(i+1)+'.';
     const txt=document.createElement('span');
-    txt.style.cssText='font-size:13px;flex:1;line-height:1.5;'+(done?'text-decoration:line-through;color:var(--text3)':current?'color:var(--text);font-weight:500':'color:var(--text2)');
+    txt.style.cssText='font-size:13px;flex:1;line-height:1.5;'+(done?'text-decoration:line-through;color:var(--text3)':selected?'color:var(--text);font-weight:500':'color:var(--text2)');
     txt.textContent=t;
     div.appendChild(idx);div.appendChild(txt);
-    if(current){
+    if(inProg){
       const tag=document.createElement('span');
       tag.style.cssText='font-size:10px;color:var(--blue-text);background:var(--blue-bg);padding:2px 6px;border-radius:99px;flex-shrink:0';
       tag.textContent='进行中';
@@ -966,11 +1205,19 @@ function renderAITaskList(){
 
 function selectAITask(i){
   aiTaskIndex=i;
+  editingAITaskIndex=i; // 进入「编辑该条」状态
   renderAITaskList();
-  const text=aiTasks[i];
-  document.getElementById('aiGoalInput').value=text;
+  document.getElementById('aiGoalInput').value=aiTasks[i];
   document.getElementById('aiStartBtn').style.display='inline-block';
 }
+
+// 在输入框里改字 → 同步到下方列表（仅文字，不重拆）
+document.getElementById('aiGoalInput').addEventListener('input',function(){
+  if(editingAITaskIndex!=null && editingAITaskIndex<aiTasks.length){
+    aiTasks[editingAITaskIndex]=this.value;
+    renderAITaskList();
+  }
+});
 
 function showAICurrentTask(text){
   document.getElementById('aiGoalInput').value=text;
@@ -980,6 +1227,8 @@ function showAICurrentTask(text){
 function startSessionFromAI(){
   const text=document.getElementById('aiGoalInput').value.trim();
   if(!text)return;
+  // 记录本轮对应的任务索引（若来自列表选择）
+  runningAITaskIndex=(editingAITaskIndex!=null)?editingAITaskIndex:null;
   const aiTime=document.getElementById('startTimeInputAI').value;
   if(aiTime)document.getElementById('startTimeInput').value=aiTime;
   updateEndTime();
@@ -988,6 +1237,18 @@ function startSessionFromAI(){
   document.getElementById('carryNotice').style.display='none';
   taskInput.dispatchEvent(new Event('input'));
   startSession();
+}
+
+// 「有别的任务要拆」：保留现有列表，清空输入框与上下文，下次拆解追加到末尾
+function askAnotherBatch(){
+  appendMode=true;
+  editingAITaskIndex=null;
+  aiConversation=[];
+  document.getElementById('aiGoalInput').value='';
+  document.getElementById('aiGoalInput').placeholder='这次想拆什么？随便说，AI 接着往列表后面加。';
+  document.getElementById('aiGoalInput').focus();
+  document.getElementById('aiStartBtn').style.display='none';
+  document.getElementById('aiStatus').textContent='';
 }
 
 // ── 调用 DeepSeek（多轮对话）──
@@ -1053,6 +1314,7 @@ TASKS:
 async function askAI(){
   const input=document.getElementById('aiGoalInput').value.trim();
   if(!input)return;
+  editingAITaskIndex=null; // 点「让AI来拆」即把输入当作新指令，退出编辑某条的状态
   const key=['sk-e75e4','8ae373d4','e8db2841','d6466ebba68'].join('');
 
   const btn=document.getElementById('aiAskBtn');
@@ -1103,11 +1365,7 @@ async function askAI(){
         document.getElementById('aiStatus').textContent='AI没有返回有效任务，请重试';
         btn.disabled=false;btn.textContent='让AI来拆 ✦';return;
       }
-      aiTasks=tasks;
-      aiTaskIndex=0;
-      completedAITasks=new Set();
-      renderAITaskList();
-      showAICurrentTask(aiTasks[0]);
+      applyParsedTasks(tasks);
       // 重置输入框placeholder
       document.getElementById('aiGoalInput').placeholder='今天想做什么？随便说，AI来拆。\n例：「我要写工作报告」或「昨天写到引言第二段，今天接着写」';
       document.getElementById('aiStatus').textContent='';
@@ -1116,8 +1374,7 @@ async function askAI(){
       const lines=reply.split('\n').map(l=>l.trim()).filter(l=>l);
       const tasks=lines.map(l=>l.replace(/^\d+[\.、。\)）]\s*/,'').trim()).filter(l=>l.length>0);
       if(tasks.length){
-        aiTasks=tasks;aiTaskIndex=0;completedAITasks=new Set();
-        renderAITaskList();showAICurrentTask(aiTasks[0]);
+        applyParsedTasks(tasks);
         document.getElementById('aiGoalInput').placeholder='今天想做什么？随便说，AI来拆。\n例：「我要写工作报告」或「昨天写到引言第二段，今天接着写」';
       } else {
         document.getElementById('aiStatus').textContent='格式异常，请重试';
@@ -1128,6 +1385,25 @@ async function askAI(){
     aiConversation.pop();
   }
   btn.disabled=false;btn.textContent='让AI来拆 ✦';
+}
+
+// 应用拆解结果：追加模式接在末尾并保留状态，否则替换并重置
+function applyParsedTasks(tasks){
+  if(appendMode){
+    const base=aiTasks.length;
+    aiTasks=aiTasks.concat(tasks);
+    aiTaskIndex=base;                 // 选中第一条新任务
+    editingAITaskIndex=null;
+    appendMode=false;
+  } else {
+    aiTasks=tasks;
+    aiTaskIndex=0;
+    completedAITasks=new Set();
+    inProgressAITasks=new Set();
+    editingAITaskIndex=null;
+  }
+  renderAITaskList();
+  showAICurrentTask(aiTasks[aiTaskIndex]);
 }
 
 // 轮次结束后推进 AI 任务队列
