@@ -179,7 +179,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       <textarea id="taskInput" placeholder="例：写完第三章公式（1）的推导，约三句话"></textarea>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
         <span id="charCount" style="font-size:12px;color:var(--text3)">0 字</span>
-        <button class="btn-primary" id="startBtn" onclick="startSession()" disabled>开始专注 →</button>
+        <button class="btn-primary" id="startBtn" onclick="gtag('event','click_start_focus',{tab:'plan'});startSession()" disabled>开始专注 →</button>
       </div>
     </div>
 
@@ -213,8 +213,8 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
         <span id="aiStatus" style="font-size:12px;color:var(--text3)"></span>
         <div style="display:flex;gap:8px">
-          <button id="aiStartBtn" class="btn-primary" onclick="startSessionFromAI()" style="display:none">开始专注 →</button>
-          <button id="aiAskBtn" class="btn-primary" onclick="askAI()">让AI来拆 ✦</button>
+          <button id="aiStartBtn" class="btn-primary" onclick="gtag('event','click_start_focus',{tab:'ai'});startSessionFromAI()" style="display:none">开始专注 →</button>
+          <button id="aiAskBtn" class="btn-primary" onclick="gtag('event','click_ai_breakdown');askAI()">让AI来拆 ✦</button>
         </div>
       </div>
     </div>
@@ -225,10 +225,10 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       <span class="label-xs" style="margin-bottom:0">今日记录</span>
       <div style="display:flex;align-items:center;gap:8px">
         <span id="histSummary" style="font-size:12px;color:var(--text3)"></span>
-        <button onclick="exportTxt()" style="background:transparent;border:1px solid var(--border2);color:var(--text2);padding:4px 10px;font-size:12px;border-radius:8px;cursor:pointer" title="导出文字版">
+        <button onclick="gtag('event','click_export',{format:'text'});exportTxt()" style="background:transparent;border:1px solid var(--border2);color:var(--text2);padding:4px 10px;font-size:12px;border-radius:8px;cursor:pointer" title="导出文字版">
           <i class="ti ti-file-text" style="font-size:12px;vertical-align:-1px;margin-right:3px"></i>文字版
         </button>
-        <button onclick="exportVis()" style="background:transparent;border:1px solid var(--border2);color:var(--text2);padding:4px 10px;font-size:12px;border-radius:8px;cursor:pointer" title="导出可视化版">
+        <button onclick="gtag('event','click_export',{format:'visual'});exportVis()" style="background:transparent;border:1px solid var(--border2);color:var(--text2);padding:4px 10px;font-size:12px;border-radius:8px;cursor:pointer" title="导出可视化版">
           <i class="ti ti-chart-bar" style="font-size:12px;vertical-align:-1px;margin-right:3px"></i>可视化版
         </button>
       </div>
@@ -328,7 +328,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
         <input type="range" min="0" max="95" step="5" value="50" id="progressSlider" oninput="updateSlider(this.value)">
         <span class="pct" id="sliderPct">50%</span>
       </div>
-      <button class="btn-primary" style="width:100%;padding:11px" onclick="markPartial()">记录进度，继续下一轮 →</button>
+      <button class="btn-primary" style="width:100%;padding:11px" onclick="gtag('event','click_record_progress');markPartial()">记录进度，继续下一轮 →</button>
     </div>
   </div>
 </div>
