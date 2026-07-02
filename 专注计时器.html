@@ -458,7 +458,7 @@ function tick(){
     updateTimerDisplay();updateRing();
     if(timeLeft<=0){clearInterval(timerInterval);enterBuffer();}
   } else if(timerMode==='up'){
-    updateTimerDisplay();
+    updateTimerDisplay();updateOvertimeRing();
   }
 }
 
@@ -502,10 +502,10 @@ function enterOvertime(){
   document.getElementById('pauseBtn').textContent='暂停';
   document.getElementById('earlyBtn').style.display='none';
   document.getElementById('overtimeStopBtn').style.display='';
-  document.getElementById('timerSubLabel').textContent='已超时';
+  document.getElementById('timerSubLabel').textContent='继续计时';
   clearInterval(timerInterval);
   timerInterval=setInterval(tick,1000);
-  updateTimerDisplay();
+  updateTimerDisplay();updateOvertimeRing();
 }
 
 function overtimeSec(){
@@ -747,6 +747,14 @@ function updateRing(){
   const c=490.1,p=Math.min(1,(DURATION-timeLeft)/DURATION);
   document.getElementById('ringFill').setAttribute('stroke-dashoffset',(c*(1-p)).toFixed(1));
 }
+// 正计时圆环：不代表真实进度，只是持续循环填充，作为视觉参照物；无时长上限，一直转下去
+const OVERTIME_RING_CYCLE=60; // 每 60 秒转满一圈，纯视觉节奏
+function updateOvertimeRing(){
+  const c=490.1;
+  const sec=overtimeSec();
+  const p=(sec%OVERTIME_RING_CYCLE)/OVERTIME_RING_CYCLE;
+  document.getElementById('ringFill').setAttribute('stroke-dashoffset',(c*(1-p)).toFixed(1));
+}
 function updateSessionDots(){
   const el=document.getElementById('sessionDots');el.innerHTML='';
   for(let i=0;i<sessionCount;i++){
@@ -892,7 +900,6 @@ function renderHistory(){
   });
 
   const maxBlocks=Math.max(...evts.map(e=>e.blocks));
-  const totalCols=Math.ceil(maxBlocks);
   const BW=36,BH=32,BR=3;
 
   list.innerHTML='';
@@ -909,8 +916,10 @@ function renderHistory(){
 
     const blocksEl=document.createElement('div');
     blocksEl.className='vis-blocks';
+    // 每一行只画自己实际有多少格，不再被最长的那一行撑长、不再补空格
     let rem=ev.blocks;
-    for(let i=0;i<totalCols;i++){
+    const ownCols=Math.ceil(rem-1e-9); // 极小容差避免浮点误差多算一格
+    for(let i=0;i<ownCols;i++){
       const amt=rem>=1?1:rem>0?rem:0;
       blocksEl.appendChild(makeVisBlock(BW,BH,BR,amt,isLongest));
       rem=Math.max(0,rem-1);
@@ -1080,7 +1089,6 @@ function exportVis(){
   const mins=totalFocusMins();
   const date=todayStr();
   const maxBlocks=Math.max(...events.map(e=>e.blocks));
-  const totalCols=Math.ceil(maxBlocks);
   const BW=36,BH=32,BR=3;
 
   function blockSVG(fillAmt,isRed){
@@ -1105,8 +1113,10 @@ function exportVis(){
     const nameColor=isLongest?'#7a1e1e':'#666';
     const nameWeight=isLongest?'600':'400';
     let blockHtml='';
+    // 每一行只画自己实际有多少格，不再被最长的那一行撑长、不再补空格
     let rem=ev.blocks;
-    for(let i=0;i<totalCols;i++){
+    const ownCols=Math.ceil(rem-1e-9);
+    for(let i=0;i<ownCols;i++){
       const amt=rem>=1?1:rem>0?rem:0;
       blockHtml+=blockSVG(amt,isLongest);
       rem=Math.max(0,rem-1);
