@@ -131,9 +131,53 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 .vis-event-name{font-size:12px;color:var(--text2);white-space:nowrap;flex-shrink:0}
 .vis-event-name.vis-hl{color:#7a1e1e;font-weight:600}
 .vis-blocks{display:flex;gap:3px;align-items:center}
+
+/* ── 引导动画 ── */
+.onboard-overlay{z-index:300}
+.onboard-box{max-width:320px;text-align:center;padding:1.9rem 1.6rem 1.5rem;position:relative}
+.onboard-close{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:6px;line-height:1}
+.onboard-close:hover{color:var(--text)}
+.onboard-icon{width:38px;height:38px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:var(--text)}
+.onboard-icon i{font-size:18px}
+.onboard-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:18px;line-height:1.4}
+.onboard-anim{position:relative;height:96px;margin:0 auto 16px}
+.ob-frame{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.ob-frame-a{animation:obShowA 2.8s infinite}
+.ob-frame-b{animation:obShowB 2.8s infinite}
+@keyframes obShowA{0%,42%{opacity:1}50%,100%{opacity:0}}
+@keyframes obShowB{0%,42%{opacity:0}58%,92%{opacity:1}100%{opacity:0}}
+@keyframes obBlinkCursor{0%,50%{opacity:1}51%,100%{opacity:0}}
+.onboard-dots{display:flex;gap:6px;justify-content:center;margin-bottom:18px}
+.ob-dot{width:6px;height:6px;border-radius:50%;background:var(--border2)}
+.ob-dot.on{background:var(--text)}
+.onboard-actions{display:flex;align-items:center;justify-content:space-between}
+.onboard-skip{font-size:13px;color:var(--text3);cursor:pointer}
+.onboard-skip:hover{color:var(--text2)}
+.ob-replay-btn{position:fixed;top:16px;right:16px;width:32px;height:32px;border-radius:50%;border:1px solid var(--border2);background:var(--bg);color:var(--text2);display:none;align-items:center;justify-content:center;cursor:pointer;z-index:150;font-size:13px;font-weight:600}
+.ob-replay-btn:hover{color:var(--text);border-color:var(--text2)}
 </style>
 </head>
 <body>
+
+<!-- ── 引导动画 ── -->
+<div class="modal-overlay onboard-overlay" id="onboardOverlay">
+  <div class="modal-box onboard-box">
+    <button class="onboard-close" onclick="skipOnboarding()" aria-label="关闭">✕</button>
+    <div class="onboard-icon" id="obIcon"><i class="ti ti-clipboard-text"></i></div>
+    <div class="onboard-title" id="obTitle">填好任务，开始专注</div>
+    <div class="onboard-anim" id="obAnim"></div>
+    <div class="onboard-dots" id="obDots"></div>
+    <div class="onboard-actions">
+      <span class="onboard-skip" onclick="skipOnboarding()">跳过</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-ghost" id="obBackBtn" onclick="obPrev()" style="display:none;white-space:nowrap">上一步</button>
+        <button class="btn-primary" id="obNextBtn" onclick="obNext()">下一步 →</button>
+      </div>
+    </div>
+  </div>
+</div>
+<button class="ob-replay-btn" id="obReplayBtn" onclick="startOnboarding()" title="查看使用引导">?</button>
+
 <!-- SVG hatch patterns for vis blocks -->
 <svg width="0" height="0" style="position:absolute;pointer-events:none">
   <defs>
@@ -1465,6 +1509,160 @@ function advanceAITask(){
 document.getElementById('resetModal').addEventListener('click',function(e){if(e.target===this)closeReset();});
 
 initStartTime();
+
+// ══════════════════ 引导动画 ══════════════════
+(function(){
+  const dashedBlock='width:20px;height:18px;border:1.3px dashed var(--border2);border-radius:3px';
+  const filledBlock='width:20px;height:18px;border:1px solid var(--text3);border-radius:3px;background:repeating-linear-gradient(45deg, var(--bg2), var(--bg2) 2px, var(--border) 2px, var(--border) 4px)';
+
+  const OB_STEPS=[
+    { icon:'ti-clipboard-text', title:'填好任务，开始专注',
+      anim:`
+      <div class="ob-frame ob-frame-a">
+        <div style="width:120px;height:32px;border:1.5px dashed var(--border2);border-radius:8px;display:flex;align-items:center;padding:0 10px">
+          <span style="width:1px;height:14px;background:var(--text);animation:obBlinkCursor 1s steps(2) infinite"></span>
+        </div>
+        <div style="width:100px;height:26px;border:1px solid var(--border);border-radius:8px;opacity:.4;font-size:11px;display:flex;align-items:center;justify-content:center;color:var(--text3)">开始专注</div>
+      </div>
+      <div class="ob-frame ob-frame-b">
+        <div style="width:120px;height:32px;border:1.5px solid var(--border2);border-radius:8px;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 10px">
+          <span style="width:72%;height:3px;background:var(--text3);border-radius:2px"></span>
+          <span style="width:46%;height:3px;background:var(--text3);border-radius:2px"></span>
+        </div>
+        <div style="width:100px;height:26px;background:var(--text);color:var(--bg);border-radius:8px;font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:600">开始专注 →</div>
+      </div>` },
+
+    { icon:'ti-message-circle', title:'对话框里说想干嘛',
+      anim:`
+      <div class="ob-frame ob-frame-a">
+        <div style="width:130px;min-height:44px;border:1.5px dashed var(--border2);border-radius:10px;display:flex;align-items:center;padding:8px 12px;font-size:11px;color:var(--text3)">今天想做什么？随便说</div>
+      </div>
+      <div class="ob-frame ob-frame-b">
+        <div style="width:130px;min-height:44px;border:1.5px solid var(--border2);border-radius:10px;display:flex;align-items:center;padding:8px 12px;font-size:12px;color:var(--text)">我要写工作报告</div>
+      </div>` },
+
+    { icon:'ti-message-question', title:'信息不够会追问细节',
+      anim:`
+      <div class="ob-frame ob-frame-a">
+        <div style="align-self:flex-end;padding:6px 12px;background:var(--bg2);border-radius:9px;font-size:11px;color:var(--text)">我要练运动</div>
+      </div>
+      <div class="ob-frame ob-frame-b">
+        <div style="align-self:flex-end;padding:6px 12px;background:var(--bg2);border-radius:9px;font-size:11px;color:var(--text)">我要练运动</div>
+        <div style="align-self:flex-start;padding:6px 12px;border:1.5px solid var(--border2);border-radius:9px;font-size:11px;color:var(--text2)">✦ 新手还是有基础？</div>
+      </div>` },
+
+    { icon:'ti-edit', title:'拆得不满意，打字改',
+      anim:`
+      <div class="ob-frame ob-frame-a">
+        <span style="padding:5px 9px;background:var(--bg2);border-radius:7px;font-size:11px;color:var(--text)">① 深蹲训练</span>
+      </div>
+      <div class="ob-frame ob-frame-b">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="padding:5px 9px;border:1.5px solid var(--border2);border-radius:7px;font-size:11px;color:var(--text)">① 拉伸热身</span>
+          <i class="ti ti-pencil" style="font-size:13px;color:var(--text3)"></i>
+        </div>
+      </div>` },
+
+    { icon:'ti-coffee', title:'计时不停，来回切换',
+      anim:`
+      <div class="ob-frame ob-frame-a">
+        <svg width="52" height="52" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="22" fill="none" stroke="var(--border)" stroke-width="5"/>
+          <circle cx="26" cy="26" r="22" fill="none" stroke="var(--text)" stroke-width="5" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="46" transform="rotate(-90 26 26)"/>
+          <text x="26" y="30" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text)">18:24</text>
+        </svg>
+        <div style="display:flex;border:1px solid var(--border2);border-radius:99px;overflow:hidden;font-size:11px">
+          <span style="padding:5px 13px;background:var(--text);color:var(--bg)">专注</span>
+          <span style="padding:5px 13px;color:var(--text2)">休息</span>
+        </div>
+      </div>
+      <div class="ob-frame ob-frame-b">
+        <svg width="52" height="52" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="22" fill="none" stroke="var(--border)" stroke-width="5"/>
+          <circle cx="26" cy="26" r="22" fill="none" stroke="var(--blue-text)" stroke-width="5" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="58" transform="rotate(-90 26 26)"/>
+          <text x="26" y="30" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text)">17:52</text>
+        </svg>
+        <div style="display:flex;border:1px solid var(--border2);border-radius:99px;overflow:hidden;font-size:11px">
+          <span style="padding:5px 13px;color:var(--text2)">专注</span>
+          <span style="padding:5px 13px;background:var(--blue-text);color:#fff">休息</span>
+        </div>
+      </div>` },
+
+    { icon:'ti-flag-3', title:'提前结束，记录进度',
+      anim:`
+      <div class="ob-frame ob-frame-a">
+        <div style="display:flex;gap:8px">
+          <span style="padding:7px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:11px;color:var(--text2)">完成</span>
+          <span style="padding:7px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:11px;color:var(--text2)">未完成</span>
+        </div>
+        <div style="width:130px;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden"></div>
+      </div>
+      <div class="ob-frame ob-frame-b">
+        <div style="display:flex;gap:8px">
+          <span style="padding:7px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:11px;color:var(--text2)">完成</span>
+          <span style="padding:7px 12px;border:1.5px solid var(--text);background:var(--text);color:var(--bg);border-radius:8px;font-size:11px;font-weight:600">未完成</span>
+        </div>
+        <div style="width:130px;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden"><div style="width:60%;height:100%;background:var(--text)"></div></div>
+      </div>` },
+
+    { icon:'ti-chart-bar', title:'方块图复盘，一键导出',
+      anim:`
+      <div class="ob-frame ob-frame-a">
+        <div style="display:flex;gap:4px">
+          <div style="${dashedBlock}"></div><div style="${dashedBlock}"></div><div style="${dashedBlock}"></div>
+        </div>
+      </div>
+      <div class="ob-frame ob-frame-b">
+        <div style="display:flex;gap:4px;align-items:center">
+          <div style="${filledBlock}"></div><div style="${filledBlock}"></div><div style="${filledBlock}"></div>
+          <i class="ti ti-download" style="margin-left:6px;color:var(--text2);font-size:15px"></i>
+        </div>
+      </div>` },
+  ];
+
+  let obIndex=0;
+
+  function renderOnboardStep(){
+    const s=OB_STEPS[obIndex];
+    document.getElementById('obIcon').innerHTML='<i class="ti '+s.icon+'"></i>';
+    document.getElementById('obTitle').textContent=s.title;
+    document.getElementById('obAnim').innerHTML=s.anim;
+    const dots=document.getElementById('obDots');
+    dots.innerHTML='';
+    OB_STEPS.forEach((_,i)=>{
+      const d=document.createElement('div');
+      d.className='ob-dot'+(i<=obIndex?' on':'');
+      dots.appendChild(d);
+    });
+    document.getElementById('obBackBtn').style.display=obIndex===0?'none':'';
+    document.getElementById('obNextBtn').textContent=obIndex===OB_STEPS.length-1?'开始使用 →':'下一步 →';
+  }
+
+  window.obNext=function(){
+    if(obIndex<OB_STEPS.length-1){obIndex++;renderOnboardStep();}
+    else finishOnboarding();
+  };
+  window.obPrev=function(){
+    if(obIndex>0){obIndex--;renderOnboardStep();}
+  };
+  window.skipOnboarding=finishOnboarding;
+  function finishOnboarding(){
+    document.getElementById('onboardOverlay').classList.remove('show');
+    document.getElementById('obReplayBtn').style.display='flex';
+    localStorage.setItem('ft_onboarded','1');
+  }
+  window.startOnboarding=function(){
+    obIndex=0;
+    renderOnboardStep();
+    document.getElementById('onboardOverlay').classList.add('show');
+  };
+
+  if(!localStorage.getItem('ft_onboarded')){
+    startOnboarding();
+  } else {
+    document.getElementById('obReplayBtn').style.display='flex';
+  }
+})();
 </script>
 </body>
 </html>
