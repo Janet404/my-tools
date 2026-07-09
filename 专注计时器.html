@@ -254,8 +254,8 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
         <div id="taskPanelBody" style="padding:8px 0">
           <div id="aiTaskList"></div>
           <div style="padding:6px 12px 2px;border-top:1px solid var(--border);margin-top:4px">
-            <button onclick="askAnotherBatch()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:4px 0;display:inline-flex;align-items:center;gap:4px" onmouseover="this.style.color='var(--text2)'" onmouseout="this.style.color='var(--text3)'">
-              <i class="ti ti-plus" style="font-size:13px"></i>有别的任务要拆
+            <button onclick="askAnotherBatch()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:4px 0;display:inline-flex;align-items:center;gap:4px" onmouseover="this.style.color='var(--text2)'" onmouseout="this.style.color='var(--text3)'" title="重新问AI，拆出新的任务追加到列表末尾">
+              <i class="ti ti-sparkles" style="font-size:13px"></i>有别的任务要拆
             </button>
           </div>
         </div>
@@ -386,6 +386,18 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   </div>
 </div>
 
+<!-- delete AI task modal -->
+<div class="modal-overlay" id="deleteAITaskModal">
+  <div class="modal-box">
+    <div class="modal-title">删除这条任务</div>
+    <div class="modal-body">确定要删除「<strong id="deleteAITaskText"></strong>」吗？此操作不可撤销。</div>
+    <div class="modal-btns">
+      <button class="btn-ghost" onclick="closeDeleteAITask()">取消</button>
+      <button class="btn-sm-danger" style="padding:9px 16px;font-size:14px" onclick="confirmDeleteAITask()">确认删除</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const DURATION=30*60;
 let timeLeft=DURATION,timerInterval=null,restInterval=null;
@@ -408,6 +420,7 @@ let feedbackContext='normal';    // 'normal' | 'earlyPlan' | 'earlyAI'
 const taskInput=document.getElementById('taskInput');
 
 function fmt(n){return String(n).padStart(2,'0')}
+function nowHM(){const n=new Date();return fmt(n.getHours())+':'+fmt(n.getMinutes());} // 抓取「此刻」真实时钟时间，用于覆盖预先算好的计划结束时间
 function addMins(t,mins){
   const[h,m]=t.split(':').map(Number);
   const d=new Date();d.setHours(h,m+mins,0,0);
@@ -533,6 +546,7 @@ function endRoundFromBuffer(){
   clearInterval(bufferInterval);clearInterval(timerInterval);
   document.getElementById('overtimeBuffer').style.display='none';
   currentBlocks=1;
+  sessionEndTime=nowHM(); // 用真实点击时刻覆盖开始阶段预算好的计划结束时间
   goToFeedback('normal');
 }
 
@@ -562,6 +576,7 @@ function stopOvertime(){
   clearInterval(timerInterval);
   const total=DURATION+overtimeSec();
   currentBlocks=total/DURATION; // 30分=1块，零头按比例
+  sessionEndTime=nowHM(); // 用真实点击时刻覆盖开始阶段预算好的计划结束时间，超时多久都按实际时刻算
   goToFeedback('normal');
 }
 
@@ -1258,6 +1273,60 @@ function toggleTaskPanel(){
   document.getElementById('taskPanelIcon').style.transform=taskPanelOpen?'rotate(180deg)':'';
 }
 
+// ── 拖拽排序：用 Pointer Events 统一实现，鼠标/触屏共用一套逻辑 ──
+// （原生 HTML5 拖放规范上就是给鼠标设计的，触屏基本不触发；Pointer Events 才是
+//   跨设备拖拽排序的标准做法，桌面和手机行为一致）
+let aiDragState=null; // {idx, el, pointerId, startX, startY, moved, overIdx}
+const AI_DRAG_THRESHOLD=6; // 移动超过这个像素数才算「开始拖」，否则算普通点击
+
+document.addEventListener('pointermove',e=>{
+  if(!aiDragState)return;
+  const st=aiDragState;
+  const dx=e.clientX-st.startX,dy=e.clientY-st.startY;
+  if(!st.moved){
+    if(Math.hypot(dx,dy)<AI_DRAG_THRESHOLD)return; // 还没达到「算拖拽」的移动量，先什么都不做
+    st.moved=true;
+    try{st.el.setPointerCapture(st.pointerId);}catch(err){}
+    st.el.style.position='relative';
+    st.el.style.zIndex='10';
+    st.el.style.boxShadow='0 4px 14px rgba(0,0,0,.18)';
+    st.el.style.background='var(--bg)';
+    st.el.style.cursor='grabbing';
+  }
+  e.preventDefault();
+  st.el.style.transform='translateY('+dy+'px)';
+  // 找出当前指针悬停在哪一行上方，用来实时预览「松手会插到这里」
+  const rows=[...document.getElementById('aiTaskList').children].filter(el=>el.dataset&&el.dataset.aiIdx!=null);
+  let overIdx=null;
+  for(const row of rows){
+    if(row===st.el)continue;
+    const r=row.getBoundingClientRect();
+    if(e.clientY>=r.top&&e.clientY<=r.bottom){overIdx=Number(row.dataset.aiIdx);break;}
+  }
+  rows.forEach(r=>{if(r!==st.el)r.style.borderTopColor='transparent';});
+  if(overIdx!=null){
+    const row=rows.find(r=>Number(r.dataset.aiIdx)===overIdx);
+    if(row)row.style.borderTopColor='var(--text)';
+  }
+  st.overIdx=overIdx;
+});
+
+function endAIDrag(){
+  if(!aiDragState)return;
+  const st=aiDragState;
+  try{st.el.releasePointerCapture(st.pointerId);}catch(err){}
+  aiDragState=null;
+  if(st.moved&&st.overIdx!=null&&st.overIdx!==st.idx){
+    moveAITask(st.idx,st.overIdx); // 内部会重新 renderAITaskList，顺带清掉所有拖拽期间加的行内样式
+  } else if(st.moved){
+    renderAITaskList(); // 拖了但没落在别的行上（比如拖出列表外松手）：还原视觉，顺序不变
+  } else {
+    selectAITask(st.idx); // 没达到拖拽阈值：当成一次普通点击，选中该任务
+  }
+}
+document.addEventListener('pointerup',endAIDrag);
+document.addEventListener('pointercancel',endAIDrag);
+
 function renderAITaskList(){
   const list=document.getElementById('aiTaskList');
   const remaining=aiTasks.filter((t,i)=>!completedAITasks.has(i)).length;
@@ -1268,16 +1337,25 @@ function renderAITaskList(){
     const inProg=!done&&inProgressAITasks.has(i);
     const selected=i===aiTaskIndex;
     const div=document.createElement('div');
-    div.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;transition:background .12s;'+(selected?'background:var(--bg3)':'');
-    div.onmouseover=()=>{if(!selected)div.style.background='var(--bg2)';};
-    div.onmouseout=()=>{if(!selected)div.style.background='';};
-    div.onclick=()=>selectAITask(i);
+    div.dataset.aiIdx=i;
+    div.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:grab;transition:background .12s;border-top:2px solid transparent;touch-action:none;user-select:none;'+(selected?'background:var(--bg3)':'');
+    div.onmouseover=()=>{if(!selected&&!aiDragState)div.style.background='var(--bg2)';};
+    div.onmouseout=()=>{if(!selected&&!aiDragState)div.style.background='';};
+
+    // 按下：先只记状态，不立刻判定是点击还是拖拽，等真的移动一段距离再算「开始拖」
+    div.addEventListener('pointerdown',e=>{
+      if(e.button!=null&&e.button!==0)return;    // 只响应主按键/单指
+      if(e.target.closest('button'))return;       // 点在删除按钮上不算拖拽起手
+      aiDragState={idx:i,el:div,pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,moved:false,overIdx:null};
+    });
+
     const idx=document.createElement('span');
     idx.style.cssText='font-size:11px;color:var(--text3);flex-shrink:0;width:16px;text-align:right';
     idx.textContent=(i+1)+'.';
     const txt=document.createElement('span');
     txt.style.cssText='font-size:13px;flex:1;line-height:1.5;'+(done?'text-decoration:line-through;color:var(--text3)':selected?'color:var(--text);font-weight:500':'color:var(--text2)');
-    txt.textContent=t;
+    txt.textContent=t||'（空白，点击输入内容）';
+    if(!t)txt.style.fontStyle='italic';
     div.appendChild(idx);div.appendChild(txt);
     if(inProg){
       const tag=document.createElement('span');
@@ -1285,9 +1363,108 @@ function renderAITaskList(){
       tag.textContent='进行中';
       div.appendChild(tag);
     }
+    const delBtn=document.createElement('button');
+    delBtn.innerHTML='<i class="ti ti-x" style="font-size:13px"></i>';
+    delBtn.title='删除这条任务';
+    delBtn.style.cssText='background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;flex-shrink:0;display:flex;align-items:center;border-radius:6px;transition:color .12s,background .12s';
+    delBtn.onmouseover=()=>{delBtn.style.color='var(--red-text)';delBtn.style.background='var(--red-bg)';};
+    delBtn.onmouseout=()=>{delBtn.style.color='var(--text3)';delBtn.style.background='';};
+    delBtn.onclick=e=>{e.stopPropagation();askDeleteAITask(i);};
+    div.appendChild(delBtn);
     list.appendChild(div);
   });
+
+  // 手动新增一条：跟下面 footer 里「有别的任务要拆」（重新调用AI）刻意区分开——
+  // 这里放在列表内部、虚线分隔、不同图标和文案，点了不调用AI，直接本地加一条空白任务
+  const addRow=document.createElement('div');
+  addRow.onclick=addManualAITask;
+  addRow.style.cssText='display:flex;align-items:center;gap:6px;padding:8px 12px;cursor:pointer;color:var(--text3);font-size:12px;border-top:1px dashed var(--border);margin-top:2px;transition:color .12s';
+  addRow.onmouseover=()=>{addRow.style.color='var(--text2)';};
+  addRow.onmouseout=()=>{addRow.style.color='var(--text3)';};
+  addRow.innerHTML='<i class="ti ti-square-plus" style="font-size:14px"></i>手动加一条';
+  list.appendChild(addRow);
+
   document.getElementById('aiTaskPanel').style.display=aiTasks.length?'block':'none';
+}
+
+// ── 删除任务：先弹确认，确认后再真正删，并把 completedAITasks / inProgressAITasks /
+// aiTaskIndex / editingAITaskIndex / runningAITaskIndex 这些「按下标记录状态」的地方
+// 全部跟着往前挪一位，避免删了中间一条之后状态张冠李戴 ──
+let pendingDeleteAIIdx=null;
+function askDeleteAITask(i){
+  pendingDeleteAIIdx=i;
+  document.getElementById('deleteAITaskText').textContent=aiTasks[i]||'（空白任务）';
+  document.getElementById('deleteAITaskModal').classList.add('show');
+}
+function closeDeleteAITask(){
+  pendingDeleteAIIdx=null;
+  document.getElementById('deleteAITaskModal').classList.remove('show');
+}
+function remapIndexAfterRemove(v,removedIdx){
+  if(v==null)return v;
+  if(v===removedIdx)return null;
+  return v>removedIdx?v-1:v;
+}
+function remapSetAfterRemove(set,removedIdx){
+  const ns=new Set();
+  set.forEach(idx=>{if(idx!==removedIdx)ns.add(idx>removedIdx?idx-1:idx);});
+  return ns;
+}
+function confirmDeleteAITask(){
+  const i=pendingDeleteAIIdx;
+  if(i==null)return;
+  aiTasks.splice(i,1);
+  completedAITasks=remapSetAfterRemove(completedAITasks,i);
+  inProgressAITasks=remapSetAfterRemove(inProgressAITasks,i);
+  aiTaskIndex=remapIndexAfterRemove(aiTaskIndex,i);
+  editingAITaskIndex=remapIndexAfterRemove(editingAITaskIndex,i);
+  runningAITaskIndex=remapIndexAfterRemove(runningAITaskIndex,i);
+  if(editingAITaskIndex==null){
+    document.getElementById('aiGoalInput').value='';
+    document.getElementById('aiStartBtn').style.display='none';
+  }
+  closeDeleteAITask();
+  renderAITaskList();
+}
+
+// ── 拖拽排序：同样要把状态下标跟着挪过去 ──
+function remapIndexAfterMove(v,from,to){
+  if(v==null)return v;
+  if(v===from)return to;
+  if(from<to&&v>from&&v<=to)return v-1;
+  if(from>to&&v>=to&&v<from)return v+1;
+  return v;
+}
+function remapSetAfterMove(set,from,to){
+  const ns=new Set();
+  set.forEach(idx=>ns.add(remapIndexAfterMove(idx,from,to)));
+  return ns;
+}
+function moveAITask(from,to){
+  if(from===to)return;
+  const item=aiTasks.splice(from,1)[0];
+  aiTasks.splice(to,0,item);
+  completedAITasks=remapSetAfterMove(completedAITasks,from,to);
+  inProgressAITasks=remapSetAfterMove(inProgressAITasks,from,to);
+  aiTaskIndex=remapIndexAfterMove(aiTaskIndex,from,to);
+  editingAITaskIndex=remapIndexAfterMove(editingAITaskIndex,from,to);
+  runningAITaskIndex=remapIndexAfterMove(runningAITaskIndex,from,to);
+  renderAITaskList();
+}
+
+// ── 手动新增一条空白任务：不调用AI，直接加进列表末尾并选中，等用户在上方输入框打字 ──
+function addManualAITask(){
+  aiTasks.push('');
+  const i=aiTasks.length-1;
+  aiTaskIndex=i;
+  editingAITaskIndex=i;
+  renderAITaskList();
+  document.getElementById('aiGoalInput').value='';
+  document.getElementById('aiStartBtn').style.display='inline-block';
+  taskPanelOpen=true;
+  document.getElementById('taskPanelBody').style.display='block';
+  document.getElementById('taskPanelIcon').style.transform='rotate(180deg)';
+  document.getElementById('aiGoalInput').focus();
 }
 
 function selectAITask(i){
