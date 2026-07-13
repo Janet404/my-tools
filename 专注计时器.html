@@ -1548,7 +1548,9 @@ function askAnotherBatch(){
   document.getElementById('aiStatus').textContent='';
 }
 
-// ── 调用 DeepSeek（多轮对话）──
+// ── 调用 DeepSeek（通过腾讯云函数代理，API Key 存在云端环境变量里，前端不接触）──
+const AI_PROXY_URL='https://1390776580-k60p0vhzaq.ap-beijing.tencentscf.com';
+
 let aiConversation=[]; // 对话历史
 
 const AI_SYSTEM_PROMPT=`你是一个专注任务拆解助手。用户告诉你今天想做什么，你帮他们拆解成若干个30分钟的具体任务。
@@ -1612,7 +1614,6 @@ async function askAI(){
   const input=document.getElementById('aiGoalInput').value.trim();
   if(!input)return;
   aiState.editingIndex=null; // 点「让AI来拆」即把输入当作新指令，退出编辑某条的状态
-  const key=['sk-e75e4','8ae373d4','e8db2841','d6466ebba68'].join('');
 
   const btn=document.getElementById('aiAskBtn');
   btn.disabled=true;btn.textContent='AI思考中…';
@@ -1622,12 +1623,10 @@ async function askAI(){
   aiConversation.push({role:'user',content:input});
 
   try{
-    const res=await fetch('https://api.deepseek.com/v1/chat/completions',{
+    const res=await fetch(AI_PROXY_URL,{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        model:'deepseek-chat',
-        max_tokens:600,
         messages:[
           {role:'system',content:AI_SYSTEM_PROMPT},
           ...aiConversation
@@ -1636,7 +1635,7 @@ async function askAI(){
     });
     if(!res.ok){
       const err=await res.json().catch(()=>({}));
-      if(res.status===401) document.getElementById('aiStatus').textContent='API Key 无效，请联系工具作者';
+      if(res.status===401||res.status===403) document.getElementById('aiStatus').textContent='AI 服务暂不可用，请联系工具作者';
       else document.getElementById('aiStatus').textContent='请求失败：'+(err.error?.message||res.status);
       aiConversation.pop(); // 失败时回滚
       btn.disabled=false;btn.textContent='让AI来拆 ✦';return;
