@@ -213,8 +213,8 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       <div class="time-row">
         <div class="time-pill">
           <label>开始</label>
-          <input type="time" id="startTimeInput" onchange="updateEndTime()">
-          <button onclick="resetToNow()" title="刷新为当前时间" style="background:none;border:none;padding:0 0 0 4px;cursor:pointer;color:var(--text3);display:flex;align-items:center;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">
+          <input type="time" id="startTimeInput" onchange="updateEndTime('plan')">
+          <button onclick="resetToNow('plan')" title="刷新为当前时间" style="background:none;border:none;padding:0 0 0 4px;cursor:pointer;color:var(--text3);display:flex;align-items:center;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">
             <i class="ti ti-refresh" style="font-size:15px"></i>
           </button>
         </div>
@@ -223,6 +223,18 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       </div>
       <span class="label-xs">我想在30分钟内完成…</span>
       <textarea id="taskInput" placeholder="例：写完第三章公式（1）的推导，约三句话"></textarea>
+
+      <!-- 任务列表折叠面板：跟【人】结构一致，但没有调AI的入口 -->
+      <div id="planTaskPanel" style="display:none;margin-top:10px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+        <button onclick="toggleTaskPanel(planState)" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--bg2);border:none;color:var(--text2);font-size:13px;cursor:pointer;text-align:left">
+          <span id="planTaskPanelLabel">待办任务</span>
+          <i class="ti ti-chevron-down" id="planTaskPanelIcon" style="font-size:14px;transition:transform .2s"></i>
+        </button>
+        <div id="planTaskPanelBody" style="padding:8px 0">
+          <div id="planTaskList"></div>
+        </div>
+      </div>
+
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
         <span id="charCount" style="font-size:12px;color:var(--text3)">0 字</span>
         <button class="btn-primary" id="startBtn" onclick="_hmt.push(['_trackEvent','按钮','开始专注','计划模式']);startSession()" disabled>开始专注 →</button>
@@ -234,8 +246,8 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       <div class="time-row">
         <div class="time-pill">
           <label>开始</label>
-          <input type="time" id="startTimeInputAI" onchange="updateEndTimeAI()">
-          <button onclick="resetToNowAI()" title="刷新为当前时间" style="background:none;border:none;padding:0 0 0 4px;cursor:pointer;color:var(--text3);display:flex;align-items:center;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">
+          <input type="time" id="startTimeInputAI" onchange="updateEndTime('ai')">
+          <button onclick="resetToNow('ai')" title="刷新为当前时间" style="background:none;border:none;padding:0 0 0 4px;cursor:pointer;color:var(--text3);display:flex;align-items:center;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">
             <i class="ti ti-refresh" style="font-size:15px"></i>
           </button>
         </div>
@@ -247,7 +259,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 
       <!-- 任务列表折叠面板 -->
       <div id="aiTaskPanel" style="display:none;margin-top:10px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
-        <button onclick="toggleTaskPanel()" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--bg2);border:none;color:var(--text2);font-size:13px;cursor:pointer;text-align:left">
+        <button onclick="toggleTaskPanel(aiState)" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--bg2);border:none;color:var(--text2);font-size:13px;cursor:pointer;text-align:left">
           <span id="taskPanelLabel">待办任务</span>
           <i class="ti ti-chevron-down" id="taskPanelIcon" style="font-size:14px;transition:transform .2s"></i>
         </button>
@@ -386,14 +398,14 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   </div>
 </div>
 
-<!-- delete AI task modal -->
-<div class="modal-overlay" id="deleteAITaskModal">
+<!-- delete task modal：【我】【人】共用同一个弹窗 -->
+<div class="modal-overlay" id="deleteTaskModal">
   <div class="modal-box">
     <div class="modal-title">删除这条任务</div>
-    <div class="modal-body">确定要删除「<strong id="deleteAITaskText"></strong>」吗？此操作不可撤销。</div>
+    <div class="modal-body">确定要删除「<strong id="deleteTaskText"></strong>」吗？此操作不可撤销。</div>
     <div class="modal-btns">
-      <button class="btn-ghost" onclick="closeDeleteAITask()">取消</button>
-      <button class="btn-sm-danger" style="padding:9px 16px;font-size:14px" onclick="confirmDeleteAITask()">确认删除</button>
+      <button class="btn-ghost" onclick="closeDeleteTask()">取消</button>
+      <button class="btn-sm-danger" style="padding:9px 16px;font-size:14px" onclick="confirmDeleteTask()">确认删除</button>
     </div>
   </div>
 </div>
@@ -417,6 +429,23 @@ let segBaseSec=0,segStart=null;  // 当前分段已计累计秒 + 本次运行�
 let earlyEndTime=null;           // 提前结束时自动捕获的时刻
 let feedbackContext='normal';    // 'normal' | 'earlyPlan' | 'earlyAI'
 
+// ── 【我】【人】两套任务列表状态，结构完全对称。所有列表相关函数（渲染/选中/增删/拖拽/
+// 开始按钮判定）都是通用函数，接收 state 参数决定操作哪一套，不再各写一份 ──
+const planState={
+  mode:'plan', tasks:[], completed:new Set(), inProgress:new Set(),
+  taskIndex:-1, editingIndex:null, runningIndex:null, open:true,
+  inputId:'taskInput', startBtnId:'startBtn',
+  listId:'planTaskList', panelId:'planTaskPanel', panelLabelId:'planTaskPanelLabel',
+  panelBodyId:'planTaskPanelBody', panelIconId:'planTaskPanelIcon'
+};
+const aiState={
+  mode:'ai', tasks:[], completed:new Set(), inProgress:new Set(),
+  taskIndex:-1, editingIndex:null, runningIndex:null, open:true,
+  inputId:'aiGoalInput', startBtnId:'aiStartBtn',
+  listId:'aiTaskList', panelId:'aiTaskPanel', panelLabelId:'taskPanelLabel',
+  panelBodyId:'taskPanelBody', panelIconId:'taskPanelIcon'
+};
+
 const taskInput=document.getElementById('taskInput');
 
 function fmt(n){return String(n).padStart(2,'0')}
@@ -426,38 +455,84 @@ function addMins(t,mins){
   const d=new Date();d.setHours(h,m+mins,0,0);
   return fmt(d.getHours())+':'+fmt(d.getMinutes());
 }
+
+// ── 时间相关：合并成参数化版本，mode 传 'plan' 或 'ai'。
+// 两边现在都会正确设置 sessionEndTime，不再是只有【我】会设——
+// 这也是第6点讨论过的那个「藏起来的不对称」，这次顺手一起修掉 ──
+function timeInputId(mode){return mode==='ai'?'startTimeInputAI':'startTimeInput';}
+function endBadgeId(mode){return mode==='ai'?'endTimeBadgeAI':'endTimeBadge';}
+function updateEndTime(mode){
+  mode=mode||'plan';
+  const v=document.getElementById(timeInputId(mode)).value;
+  if(!v){document.getElementById(endBadgeId(mode)).textContent='30 分钟后';sessionEndTime=null;return;}
+  const end=addMins(v,30);
+  document.getElementById(endBadgeId(mode)).textContent=end;
+  sessionEndTime=end;
+}
+function resetToNow(mode){
+  mode=mode||'plan';
+  const n=new Date();
+  document.getElementById(timeInputId(mode)).value=fmt(n.getHours())+':'+fmt(n.getMinutes());
+  updateEndTime(mode);
+  renderHistory();
+}
 function initStartTime(){
   const n=new Date();
   const val=fmt(n.getHours())+':'+fmt(n.getMinutes());
   document.getElementById('startTimeInput').value=val;
   document.getElementById('startTimeInputAI').value=val;
-  updateEndTime();
-  updateEndTimeAI();
+  updateEndTime('plan');
+  updateEndTime('ai');
 }
-function resetToNow(){
-  const n=new Date();
-  document.getElementById('startTimeInput').value=fmt(n.getHours())+':'+fmt(n.getMinutes());
-  updateEndTime();
-  renderHistory();
-}
-function updateEndTime(){
-  const v=document.getElementById('startTimeInput').value;
-  if(!v){document.getElementById('endTimeBadge').textContent='30 分钟后';sessionEndTime=null;return;}
-  const end=addMins(v,30);
-  document.getElementById('endTimeBadge').textContent=end;
-  sessionEndTime=end;
+
+// ── 「开始专注」按钮启用条件：【我】三档，【人】规则不变 ──
+// 0条/1条 = 看文本框有没有字；≥2条 = 看有没有选中列表某一条（跟【人】完全一致）
+// 【人】本身的规则维持原样：始终必须选中列表某一条
+function updateStartBtnState(state){
+  const n=state.tasks.length;
+  const inputEl=document.getElementById(state.inputId);
+  const hasText=inputEl.value.trim().length>0;
+  const enabled = state.mode==='plan'
+    ? (n>=2 ? state.editingIndex!=null : hasText)
+    : (state.editingIndex!=null);
+  const btn=document.getElementById(state.startBtnId);
+  if(!btn)return;
+  if(state.mode==='ai'){
+    btn.style.display=enabled?'inline-block':'none';
+  } else {
+    btn.disabled=!enabled;
+  }
 }
 
 taskInput.addEventListener('input',()=>{
   const l=taskInput.value.trim().length;
   document.getElementById('charCount').textContent=l+' 字';
-  document.getElementById('startBtn').disabled=l===0;
+  // 有选中某一条时，改字实时同步回列表对应条目（跟【人】一致）；没选中就是纯自由输入
+  if(planState.editingIndex!=null && planState.editingIndex<planState.tasks.length){
+    planState.tasks[planState.editingIndex]=taskInput.value;
+    renderTaskList(planState);
+  }
+  updateStartBtnState(planState);
 });
 
 function showPhase(id){document.querySelectorAll('.phase').forEach(p=>p.classList.remove('active'));document.getElementById(id).classList.add('active');}
 
 function startSession(){
   currentTask=taskInput.value.trim();if(!currentTask)return;
+  // 只有真的是【我】这边发起的开始，才归入 planTasks；【人】走 startSessionFromAI 间接调用这里，
+  // 那边已经自己维护 aiState，不需要也不应该在这里重复处理
+  if(currentTab==='plan'){
+    if(planState.editingIndex!=null && planState.editingIndex<planState.tasks.length){
+      planState.taskIndex=planState.editingIndex;
+      planState.runningIndex=planState.editingIndex;
+      planState.tasks[planState.editingIndex]=currentTask;
+    } else {
+      planState.tasks.push(currentTask);
+      planState.taskIndex=planState.tasks.length-1;
+      planState.runningIndex=planState.tasks.length-1;
+    }
+    renderTaskList(planState);
+  }
   sessionCount++;timeLeft=DURATION;isPaused=false;
   deadlineTs=Date.now()+DURATION*1000; // 方案一：记录目标结束时间戳
   pausedTimeLeft=null;
@@ -473,7 +548,7 @@ function startSession(){
   document.getElementById('pauseBtn').style.display='';
   document.getElementById('timerSubLabel').textContent='剩余';
   sessionStartTime=document.getElementById('startTimeInput').value;
-  updateEndTime();
+  updateEndTime('plan');
   document.getElementById('timerTaskLabel').textContent=currentTask;
   document.getElementById('timerEndLabel').textContent=sessionEndTime||'—';
   updateTimerDisplay();updateRing();updateSessionDots();
@@ -653,118 +728,119 @@ function commitSegments(pct,done,endTime){
 }
 
 function confirmEarlyChoice(){
-  const isAI=currentTab==='ai';
+  const state=currentTab==='ai'?aiState:planState;
 
   if(earlyChoice==='partial'){
     // 进进度条页（无「完成！」按钮）；记录在进度确认时写入
-    goToFeedback(isAI?'earlyAI':'earlyPlan');
+    goToFeedback(currentTab==='ai'?'earlyAI':'earlyPlan');
     return;
   }
 
   // 'done'：任务段算 100% 完成，休息段单独成行
   commitSegments(100,true,earlyEndTime);
   lastUnfinishedTask=null;
-
-  if(isAI){
-    markAIComplete();
-    returnToAIList(earlyEndTime,true);
-  } else {
-    // 完成！直接入统计，回设置页，输入框清空
-    finishToSetup(earlyEndTime,'');
-  }
+  markComplete(state);
+  returnToSetup(currentTab,earlyEndTime,true);
 }
 
-// 提前结束后回到设置页（我有计划）
-function finishToSetup(newStart,fillText){
-  taskInput.value=fillText||'';
-  document.getElementById('carryNotice').style.display=fillText?'flex':'none';
-  document.getElementById('progressSlider').value=50;
-  document.getElementById('sliderPct').textContent='50%';
+// ── 收尾回到设置页：【我】【人】共用一个函数，mode 决定操作哪一套 state ──
+// newStart: 新的开始时间（回填两个输入框）
+// autoNext: 完成后如果列表里还有别的待办，自动选中下一条（用户仍可随时手动点选别的覆盖掉）
+// refillIdx/refillText: 未完成时，把这条任务（按下标，或兜底用纯文本）重新带回来，标题右侧那个横幅
+//   （只有【我】有）会在这种情况下显示
+function returnToSetup(mode,newStart,autoNext,refillIdx,refillText){
+  const state=mode==='ai'?aiState:planState;
   if(newStart){
     document.getElementById('startTimeInput').value=newStart;
     document.getElementById('startTimeInputAI').value=newStart;
   }
-  updateEndTime();
-  const l=taskInput.value.trim().length;
-  document.getElementById('charCount').textContent=l+' 字';
-  document.getElementById('startBtn').disabled=l===0;
+  updateEndTime('plan');updateEndTime('ai');
+
+  // 【人】这一轮如果脏写过共享的 taskInput（走 startSessionFromAI 时会写进去），
+  // 收尾时要清掉，避免文字串台到【我】的框里；【我】自己这条路不会脏写 aiGoalInput，不需要对称处理
+  if(mode==='ai'){
+    taskInput.value='';
+    document.getElementById('charCount').textContent='0 字';
+  }
+  document.getElementById('carryNotice').style.display='none'; // 默认先收起，只有下面「未完成回填」分支会重新打开
+
+  document.getElementById('progressSlider').value=50;
+  document.getElementById('sliderPct').textContent='50%';
+
+  state.editingIndex=null;
+  const inputEl=document.getElementById(state.inputId);
+
+  if(refillIdx!=null&&refillIdx>=0&&refillIdx<state.tasks.length){
+    // 未完成：把该任务回填，可继续或改选；标「进行中」由调用方负责
+    state.taskIndex=refillIdx;
+    state.editingIndex=refillIdx;
+    inputEl.value=state.tasks[refillIdx];
+    if(mode==='plan'){
+      document.getElementById('charCount').textContent=state.tasks[refillIdx].length+' 字';
+      document.getElementById('carryNotice').style.display='flex';
+    }
+  } else if(refillText){
+    // 兜底：未完成但没有有效下标可用（理论上现在两边都走列表下标，这条基本不会触发）
+    state.taskIndex=-1;
+    inputEl.value=refillText;
+    if(mode==='plan'){
+      document.getElementById('charCount').textContent=refillText.length+' 字';
+      document.getElementById('carryNotice').style.display='flex';
+    }
+  } else if(autoNext){
+    const j=nextPendingIndex(state,state.runningIndex);
+    if(j>=0){
+      state.taskIndex=j;
+      state.editingIndex=j; // 自动填充并可编辑（改字同步列表），用户也可以随时手动点列表里别的任务覆盖掉
+      inputEl.value=state.tasks[j];
+      if(mode==='plan')document.getElementById('charCount').textContent=state.tasks[j].length+' 字';
+    } else {
+      state.taskIndex=-1;
+      inputEl.value='';
+      if(mode==='plan')document.getElementById('charCount').textContent='0 字';
+    }
+  } else {
+    state.taskIndex=-1; // 不预选，等用户自己挑或自己打字
+    inputEl.value='';
+    if(mode==='plan')document.getElementById('charCount').textContent='0 字';
+  }
+
+  updateStartBtnState(state);
+  renderTaskList(planState);
+  renderTaskList(aiState);
   renderHistory();
-  if(currentTab!=='plan')switchTab('plan');
+  if(currentTab!==mode)switchTab(mode);
   showPhase('phaseSetup');
-  taskInput.focus();
-  taskInput.setSelectionRange(taskInput.value.length,taskInput.value.length);
+  if(mode==='plan'){
+    taskInput.focus();
+    taskInput.setSelectionRange(taskInput.value.length,taskInput.value.length);
+  }
 }
 
-// 提前结束后回到 AI 任务列表（懒蛋人类），用户自己挑下一个
-// 找下一条「未完成」的任务索引：先从 after 之后找，找不到再从头找
-function nextPendingIndex(after){
-  const n=aiTasks.length;
+// 找下一条「未完成」的任务下标：先从 after 之后找，找不到再从头找
+function nextPendingIndex(state,after){
+  const n=state.tasks.length;
+  if(n===0)return -1;
   for(let k=1;k<=n;k++){
     const i=((after==null?-1:after)+k)%n;
-    if(!completedAITasks.has(i))return i;
+    if(!state.completed.has(i))return i;
   }
   return -1;
 }
 
-function returnToAIList(newStart,autoNext,refillIdx,refillText){
-  if(newStart){
-    document.getElementById('startTimeInput').value=newStart;
-    document.getElementById('startTimeInputAI').value=newStart;
-  }
-  updateEndTime();updateEndTimeAI();
-  // 清空「我有计划」对话框，避免 AI 任务文本残留串台到 plan 框
-  taskInput.value='';
-  document.getElementById('carryNotice').style.display='none';
-  document.getElementById('charCount').textContent='0 字';
-  document.getElementById('startBtn').disabled=true;
-  editingAITaskIndex=null;
-  if(refillIdx!=null && refillIdx>=0 && refillIdx<aiTasks.length){
-    // 未完成：把该任务回填进「懒蛋人类」对话框，可继续或改选；标进行中由调用方负责
-    aiTaskIndex=refillIdx;
-    editingAITaskIndex=refillIdx;
-    document.getElementById('aiGoalInput').value=aiTasks[refillIdx];
-    document.getElementById('aiStartBtn').style.display='inline-block';
-  } else if(refillText){
-    // 未完成但任务非来自列表（手打文本）：仍回填进「懒蛋人类」对话框
-    aiTaskIndex=-1;
-    document.getElementById('aiGoalInput').value=refillText;
-    document.getElementById('aiStartBtn').style.display='inline-block';
-  } else if(autoNext){
-    const j=nextPendingIndex(runningAITaskIndex);
-    if(j>=0){
-      aiTaskIndex=j;
-      editingAITaskIndex=j; // 自动填充并可编辑（改字同步列表）
-      document.getElementById('aiGoalInput').value=aiTasks[j];
-      document.getElementById('aiStartBtn').style.display='inline-block';
-    } else {
-      aiTaskIndex=-1;
-      document.getElementById('aiGoalInput').value='';
-      document.getElementById('aiStartBtn').style.display='none';
-    }
-  } else {
-    aiTaskIndex=-1; // 不预选，等用户自己挑
-    document.getElementById('aiGoalInput').value='';
-    document.getElementById('aiStartBtn').style.display='none';
-  }
-  renderAITaskList();
-  renderHistory();
-  if(currentTab!=='ai')switchTab('ai');
-  showPhase('phaseSetup');
-}
-
-// 把当前运行的 AI 任务标记为完成（删除线），移出进行中
-function markAIComplete(){
-  if(runningAITaskIndex!=null){
-    completedAITasks.add(runningAITaskIndex);
-    inProgressAITasks.delete(runningAITaskIndex);
-    renderAITaskList();
+// 把当前运行的任务标记为完成（删除线），移出进行中——【我】【人】共用
+function markComplete(state){
+  if(state.runningIndex!=null){
+    state.completed.add(state.runningIndex);
+    state.inProgress.delete(state.runningIndex);
+    renderTaskList(state);
   }
 }
-// 把当前运行的 AI 任务标记为进行中（未完成，可多个并存）
-function markAIInProgress(){
-  if(runningAITaskIndex!=null && !completedAITasks.has(runningAITaskIndex)){
-    inProgressAITasks.add(runningAITaskIndex);
-    renderAITaskList();
+// 把当前运行的任务标记为进行中（未完成，可多个并存）——【我】【人】共用
+function markInProgress(state){
+  if(state.runningIndex!=null&&!state.completed.has(state.runningIndex)){
+    state.inProgress.add(state.runningIndex);
+    renderTaskList(state);
   }
 }
 
@@ -774,23 +850,6 @@ function timeDiffMins(fromStr,toStr){
   let diff=(th*60+tm)-(fh*60+fm);
   if(diff<0)diff+=24*60;
   return diff;
-}
-
-function prepareNextTask(newStart){
-  taskInput.value='';
-  document.getElementById('carryNotice').style.display='none';
-  document.getElementById('charCount').textContent='0 字';
-  document.getElementById('startBtn').disabled=true;
-  document.getElementById('progressSlider').value=50;
-  document.getElementById('sliderPct').textContent='50%';
-  if(newStart){
-    document.getElementById('startTimeInput').value=newStart;
-    document.getElementById('startTimeInputAI').value=newStart;
-  }
-  updateEndTime();
-  renderHistory();
-  showPhase('phaseSetup');
-  taskInput.focus();
 }
 
 function updateTimerDisplay(){
@@ -830,59 +889,33 @@ function markDone(){
   flushSegment();
   commitSegments(100,true,sessionEndTime);
   lastUnfinishedTask=null;
-  if(currentTab==='ai'){
-    markAIComplete();
-    returnToAIList(sessionEndTime,true);
-  } else {
-    finishRoundPlan(false);
-  }
+  const state=currentTab==='ai'?aiState:planState;
+  markComplete(state);
+  returnToSetup(currentTab,sessionEndTime,true);
 }
 function markPartial(){
   const pct=parseInt(document.getElementById('progressSlider').value);
   if(feedbackContext==='earlyPlan'){
     commitSegments(pct,false,earlyEndTime);
     lastUnfinishedTask=currentTask;
-    finishToSetup(earlyEndTime,currentTask); // 自动回填同样文本
+    markInProgress(planState);
+    returnToSetup('plan',earlyEndTime,false,planState.runningIndex,currentTask);
     return;
   }
   if(feedbackContext==='earlyAI'){
     commitSegments(pct,false,earlyEndTime);
-    markAIInProgress();
-    // 未完成 → 该任务回填进「懒蛋人类」对话框，标进行中，由用户决定继续或改选
-    returnToAIList(earlyEndTime,false,runningAITaskIndex,currentTask);
+    markInProgress(aiState);
+    // 未完成 → 该任务回填，标进行中，由用户决定继续或改选
+    returnToSetup('ai',earlyEndTime,false,aiState.runningIndex,currentTask);
     return;
   }
   // normal：自然结束时把最后一段也落一笔
   flushSegment();
   commitSegments(pct,false,sessionEndTime);
-  if(currentTab==='ai'){
-    markAIInProgress();
-    returnToAIList(sessionEndTime,false,runningAITaskIndex,currentTask);
-  } else {
-    lastUnfinishedTask=currentTask;
-    finishRoundPlan(true);
-  }
-}
-function finishRoundPlan(carry){
-  document.getElementById('progressSlider').value=50;
-  document.getElementById('sliderPct').textContent='50%';
-  const notice=document.getElementById('carryNotice');
-  if(carry&&lastUnfinishedTask){
-    taskInput.value=lastUnfinishedTask;
-    notice.style.display='flex';
-  } else {
-    taskInput.value='';
-    notice.style.display='none';
-  }
-  const l=taskInput.value.trim().length;
-  document.getElementById('charCount').textContent=l+' 字';
-  document.getElementById('startBtn').disabled=l===0;
-  if(sessionEndTime)document.getElementById('startTimeInput').value=sessionEndTime;
-  updateEndTime();renderHistory();
-  if(currentTab!=='plan')switchTab('plan');
-  showPhase('phaseSetup');
-  taskInput.focus();
-  taskInput.setSelectionRange(taskInput.value.length,taskInput.value.length);
+  const state=currentTab==='ai'?aiState:planState;
+  markInProgress(state);
+  lastUnfinishedTask=currentTask;
+  returnToSetup(currentTab,sessionEndTime,false,state.runningIndex,currentTask);
 }
 
 function makeVisBlock(BW,BH,BR,fillAmt,isRed){
@@ -998,10 +1031,13 @@ function doReset(){
   history=[];sessionCount=0;lastUnfinishedTask=null;currentTask='';
   timerMode='down';overtimeBaseSec=0;overtimeSegStart=null;currentBlocks=1;isPaused=false;
   isResting=false;segments=[];segBaseSec=0;segStart=null;
-  aiTasks=[];aiTaskIndex=0;completedAITasks=new Set();inProgressAITasks=new Set();
-  editingAITaskIndex=null;runningAITaskIndex=null;appendMode=false;aiConversation=[];
-  document.getElementById('aiTaskPanel').style.display='none';
-  document.getElementById('aiTaskList').innerHTML='';
+  [planState,aiState].forEach(s=>{
+    s.tasks=[];s.completed=new Set();s.inProgress=new Set();
+    s.taskIndex=-1;s.editingIndex=null;s.runningIndex=null;
+  });
+  appendMode=false;aiConversation=[];
+  renderTaskList(planState); // 走通用渲染，不手动写死隐藏——【我】重置后面板也该照旧常驻显示
+  renderTaskList(aiState); // 同样走通用渲染；aiState此时已清空，0条对【人】来说本来就该隐藏，规则跟正常渲染时一致
   document.getElementById('aiGoalInput').value='';
   document.getElementById('aiStartBtn').style.display='none';
   document.getElementById('aiStatus').textContent='';
@@ -1232,10 +1268,10 @@ function switchTab(tab){
   document.getElementById('tabAI').style.background=isPlan?'transparent':'var(--text)';
   document.getElementById('tabAI').style.color=isPlan?'var(--text2)':'var(--bg)';
   if(!isPlan){
-    // 同步时间
+    // 同步时间（这一条保持原有的不对称：只有切到【人】才会同步，切回【我】不会同步回去，第5点讨论过维持原样）
     const v=document.getElementById('startTimeInput').value;
     if(v)document.getElementById('startTimeInputAI').value=v;
-    updateEndTimeAI();
+    updateEndTime('ai');
     // 只有第一次切过来（没有对话历史）才重置
     if(aiConversation.length===0){
       document.getElementById('aiGoalInput').placeholder='今天想做什么？随便说，AI来拆。\n例：「我要写工作报告」或「昨天写到引言第二段，今天接着写」';
@@ -1245,38 +1281,19 @@ function switchTab(tab){
   }
 }
 
-function updateEndTimeAI(){
-  const v=document.getElementById('startTimeInputAI').value;
-  if(!v){document.getElementById('endTimeBadgeAI').textContent='30 分钟后';return;}
-  document.getElementById('endTimeBadgeAI').textContent=addMins(v,30);
-}
-function resetToNowAI(){
-  const n=new Date();
-  document.getElementById('startTimeInputAI').value=fmt(n.getHours())+':'+fmt(n.getMinutes());
-  updateEndTimeAI();
-  renderHistory();
+let appendMode=false; // 「有别的任务要拆」：下次拆解结果追加到列表末尾（AI 对话专属，不是通用列表状态的一部分）
+
+// ── 任务列表折叠面板：【我】【人】共用 ──
+function toggleTaskPanel(state){
+  state.open=!state.open;
+  document.getElementById(state.panelBodyId).style.display=state.open?'block':'none';
+  document.getElementById(state.panelIconId).style.transform=state.open?'rotate(180deg)':'';
 }
 
-// ── AI 任务队列 ──
-let aiTasks=[];
-let aiTaskIndex=0;
-let taskPanelOpen=true;
-let completedAITasks=new Set(); // 已完成（删除线）的任务索引
-let inProgressAITasks=new Set(); // 进行中的任务索引（可多个并存）
-let editingAITaskIndex=null;     // 当前正在输入框里编辑的任务索引
-let runningAITaskIndex=null;     // 本轮计时对应的任务索引
-let appendMode=false;            // 「有别的任务要拆」：下次拆解结果追加到列表末尾
-
-function toggleTaskPanel(){
-  taskPanelOpen=!taskPanelOpen;
-  document.getElementById('taskPanelBody').style.display=taskPanelOpen?'block':'none';
-  document.getElementById('taskPanelIcon').style.transform=taskPanelOpen?'rotate(180deg)':'';
-}
-
-// ── 拖拽排序：用 Pointer Events 统一实现，鼠标/触屏共用一套逻辑 ──
+// ── 拖拽排序：用 Pointer Events 统一实现，鼠标/触屏共用一套逻辑，【我】【人】共用 ──
 // （原生 HTML5 拖放规范上就是给鼠标设计的，触屏基本不触发；Pointer Events 才是
 //   跨设备拖拽排序的标准做法，桌面和手机行为一致）
-let aiDragState=null; // {idx, el, pointerId, startX, startY, moved, overIdx}
+let aiDragState=null; // {state, idx, el, pointerId, startX, startY, moved, overIdx}
 const AI_DRAG_THRESHOLD=6; // 移动超过这个像素数才算「开始拖」，否则算普通点击
 
 document.addEventListener('pointermove',e=>{
@@ -1296,16 +1313,16 @@ document.addEventListener('pointermove',e=>{
   e.preventDefault();
   st.el.style.transform='translateY('+dy+'px)';
   // 找出当前指针悬停在哪一行上方，用来实时预览「松手会插到这里」
-  const rows=[...document.getElementById('aiTaskList').children].filter(el=>el.dataset&&el.dataset.aiIdx!=null);
+  const rows=[...document.getElementById(st.state.listId).children].filter(el=>el.dataset&&el.dataset.taskIdx!=null);
   let overIdx=null;
   for(const row of rows){
     if(row===st.el)continue;
     const r=row.getBoundingClientRect();
-    if(e.clientY>=r.top&&e.clientY<=r.bottom){overIdx=Number(row.dataset.aiIdx);break;}
+    if(e.clientY>=r.top&&e.clientY<=r.bottom){overIdx=Number(row.dataset.taskIdx);break;}
   }
   rows.forEach(r=>{if(r!==st.el)r.style.borderTopColor='transparent';});
   if(overIdx!=null){
-    const row=rows.find(r=>Number(r.dataset.aiIdx)===overIdx);
+    const row=rows.find(r=>Number(r.dataset.taskIdx)===overIdx);
     if(row)row.style.borderTopColor='var(--text)';
   }
   st.overIdx=overIdx;
@@ -1317,27 +1334,27 @@ function endAIDrag(){
   try{st.el.releasePointerCapture(st.pointerId);}catch(err){}
   aiDragState=null;
   if(st.moved&&st.overIdx!=null&&st.overIdx!==st.idx){
-    moveAITask(st.idx,st.overIdx); // 内部会重新 renderAITaskList，顺带清掉所有拖拽期间加的行内样式
+    moveTask(st.state,st.idx,st.overIdx); // 内部会重新渲染，顺带清掉所有拖拽期间加的行内样式
   } else if(st.moved){
-    renderAITaskList(); // 拖了但没落在别的行上（比如拖出列表外松手）：还原视觉，顺序不变
+    renderTaskList(st.state); // 拖了但没落在别的行上（比如拖出列表外松手）：还原视觉，顺序不变
   } else {
-    selectAITask(st.idx); // 没达到拖拽阈值：当成一次普通点击，选中该任务
+    selectTask(st.state,st.idx); // 没达到拖拽阈值：当成一次普通点击，选中该任务
   }
 }
 document.addEventListener('pointerup',endAIDrag);
 document.addEventListener('pointercancel',endAIDrag);
 
-function renderAITaskList(){
-  const list=document.getElementById('aiTaskList');
-  const remaining=aiTasks.filter((t,i)=>!completedAITasks.has(i)).length;
-  document.getElementById('taskPanelLabel').textContent='待办任务 '+remaining+' 项';
+function renderTaskList(state){
+  const list=document.getElementById(state.listId);
+  const remaining=state.tasks.filter((t,i)=>!state.completed.has(i)).length;
+  document.getElementById(state.panelLabelId).textContent='待办任务 '+remaining+' 项';
   list.innerHTML='';
-  aiTasks.forEach((t,i)=>{
-    const done=completedAITasks.has(i);
-    const inProg=!done&&inProgressAITasks.has(i);
-    const selected=i===aiTaskIndex;
+  state.tasks.forEach((t,i)=>{
+    const done=state.completed.has(i);
+    const inProg=!done&&state.inProgress.has(i);
+    const selected=i===state.taskIndex;
     const div=document.createElement('div');
-    div.dataset.aiIdx=i;
+    div.dataset.taskIdx=i;
     div.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:grab;transition:background .12s;border-top:2px solid transparent;touch-action:none;user-select:none;'+(selected?'background:var(--bg3)':'');
     div.onmouseover=()=>{if(!selected&&!aiDragState)div.style.background='var(--bg2)';};
     div.onmouseout=()=>{if(!selected&&!aiDragState)div.style.background='';};
@@ -1346,7 +1363,7 @@ function renderAITaskList(){
     div.addEventListener('pointerdown',e=>{
       if(e.button!=null&&e.button!==0)return;    // 只响应主按键/单指
       if(e.target.closest('button'))return;       // 点在删除按钮上不算拖拽起手
-      aiDragState={idx:i,el:div,pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,moved:false,overIdx:null};
+      aiDragState={state,idx:i,el:div,pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,moved:false,overIdx:null};
     });
 
     const idx=document.createElement('span');
@@ -1369,36 +1386,39 @@ function renderAITaskList(){
     delBtn.style.cssText='background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;flex-shrink:0;display:flex;align-items:center;border-radius:6px;transition:color .12s,background .12s';
     delBtn.onmouseover=()=>{delBtn.style.color='var(--red-text)';delBtn.style.background='var(--red-bg)';};
     delBtn.onmouseout=()=>{delBtn.style.color='var(--text3)';delBtn.style.background='';};
-    delBtn.onclick=e=>{e.stopPropagation();askDeleteAITask(i);};
+    delBtn.onclick=e=>{e.stopPropagation();askDeleteTask(state,i);};
     div.appendChild(delBtn);
     list.appendChild(div);
   });
 
-  // 手动新增一条：跟下面 footer 里「有别的任务要拆」（重新调用AI）刻意区分开——
+  // 手动新增一条：跟【人】下面 footer 里「有别的任务要拆」（重新调用AI）刻意区分开——
   // 这里放在列表内部、虚线分隔、不同图标和文案，点了不调用AI，直接本地加一条空白任务
   const addRow=document.createElement('div');
-  addRow.onclick=addManualAITask;
+  addRow.onclick=()=>addManualTask(state);
   addRow.style.cssText='display:flex;align-items:center;gap:6px;padding:8px 12px;cursor:pointer;color:var(--text3);font-size:12px;border-top:1px dashed var(--border);margin-top:2px;transition:color .12s';
   addRow.onmouseover=()=>{addRow.style.color='var(--text2)';};
   addRow.onmouseout=()=>{addRow.style.color='var(--text3)';};
   addRow.innerHTML='<i class="ti ti-square-plus" style="font-size:14px"></i>手动加一条';
   list.appendChild(addRow);
 
-  document.getElementById('aiTaskPanel').style.display=aiTasks.length?'block':'none';
+  // 面板要不要露出来，两边规则不一样：
+  // 【人】0条时隐藏——本来就得先靠AI拆出东西才有列表可言，没有"用户已经有清单只是没打字"这种情况
+  // 【我】哪怕0条也常驻显示——不然"手动加一条"这个唯一能从0条起步、不用打字就开始计时的入口会被连带藏起来
+  document.getElementById(state.panelId).style.display=(state.mode==='plan'||state.tasks.length)?'block':'none';
 }
 
-// ── 删除任务：先弹确认，确认后再真正删，并把 completedAITasks / inProgressAITasks /
-// aiTaskIndex / editingAITaskIndex / runningAITaskIndex 这些「按下标记录状态」的地方
-// 全部跟着往前挪一位，避免删了中间一条之后状态张冠李戴 ──
-let pendingDeleteAIIdx=null;
-function askDeleteAITask(i){
-  pendingDeleteAIIdx=i;
-  document.getElementById('deleteAITaskText').textContent=aiTasks[i]||'（空白任务）';
-  document.getElementById('deleteAITaskModal').classList.add('show');
+// ── 删除任务：先弹确认，确认后再真正删，并把 completed / inProgress /
+// taskIndex / editingIndex / runningIndex 这些「按下标记录状态」的地方
+// 全部跟着往前挪一位，避免删了中间一条之后状态张冠李戴——【我】【人】共用一套 ──
+let pendingDelete=null; // {state, idx}
+function askDeleteTask(state,i){
+  pendingDelete={state,idx:i};
+  document.getElementById('deleteTaskText').textContent=state.tasks[i]||'（空白任务）';
+  document.getElementById('deleteTaskModal').classList.add('show');
 }
-function closeDeleteAITask(){
-  pendingDeleteAIIdx=null;
-  document.getElementById('deleteAITaskModal').classList.remove('show');
+function closeDeleteTask(){
+  pendingDelete=null;
+  document.getElementById('deleteTaskModal').classList.remove('show');
 }
 function remapIndexAfterRemove(v,removedIdx){
   if(v==null)return v;
@@ -1410,21 +1430,22 @@ function remapSetAfterRemove(set,removedIdx){
   set.forEach(idx=>{if(idx!==removedIdx)ns.add(idx>removedIdx?idx-1:idx);});
   return ns;
 }
-function confirmDeleteAITask(){
-  const i=pendingDeleteAIIdx;
-  if(i==null)return;
-  aiTasks.splice(i,1);
-  completedAITasks=remapSetAfterRemove(completedAITasks,i);
-  inProgressAITasks=remapSetAfterRemove(inProgressAITasks,i);
-  aiTaskIndex=remapIndexAfterRemove(aiTaskIndex,i);
-  editingAITaskIndex=remapIndexAfterRemove(editingAITaskIndex,i);
-  runningAITaskIndex=remapIndexAfterRemove(runningAITaskIndex,i);
-  if(editingAITaskIndex==null){
-    document.getElementById('aiGoalInput').value='';
-    document.getElementById('aiStartBtn').style.display='none';
+function confirmDeleteTask(){
+  if(!pendingDelete)return;
+  const{state,idx:i}=pendingDelete;
+  state.tasks.splice(i,1);
+  state.completed=remapSetAfterRemove(state.completed,i);
+  state.inProgress=remapSetAfterRemove(state.inProgress,i);
+  state.taskIndex=remapIndexAfterRemove(state.taskIndex,i);
+  state.editingIndex=remapIndexAfterRemove(state.editingIndex,i);
+  state.runningIndex=remapIndexAfterRemove(state.runningIndex,i);
+  if(state.editingIndex==null){
+    document.getElementById(state.inputId).value='';
+    if(state.mode==='plan')document.getElementById('charCount').textContent='0 字';
   }
-  closeDeleteAITask();
-  renderAITaskList();
+  closeDeleteTask();
+  renderTaskList(state);
+  updateStartBtnState(state);
 }
 
 // ── 拖拽排序：同样要把状态下标跟着挪过去 ──
@@ -1440,46 +1461,50 @@ function remapSetAfterMove(set,from,to){
   set.forEach(idx=>ns.add(remapIndexAfterMove(idx,from,to)));
   return ns;
 }
-function moveAITask(from,to){
+function moveTask(state,from,to){
   if(from===to)return;
-  const item=aiTasks.splice(from,1)[0];
-  aiTasks.splice(to,0,item);
-  completedAITasks=remapSetAfterMove(completedAITasks,from,to);
-  inProgressAITasks=remapSetAfterMove(inProgressAITasks,from,to);
-  aiTaskIndex=remapIndexAfterMove(aiTaskIndex,from,to);
-  editingAITaskIndex=remapIndexAfterMove(editingAITaskIndex,from,to);
-  runningAITaskIndex=remapIndexAfterMove(runningAITaskIndex,from,to);
-  renderAITaskList();
+  const item=state.tasks.splice(from,1)[0];
+  state.tasks.splice(to,0,item);
+  state.completed=remapSetAfterMove(state.completed,from,to);
+  state.inProgress=remapSetAfterMove(state.inProgress,from,to);
+  state.taskIndex=remapIndexAfterMove(state.taskIndex,from,to);
+  state.editingIndex=remapIndexAfterMove(state.editingIndex,from,to);
+  state.runningIndex=remapIndexAfterMove(state.runningIndex,from,to);
+  renderTaskList(state);
 }
 
 // ── 手动新增一条空白任务：不调用AI，直接加进列表末尾并选中，等用户在上方输入框打字 ──
-function addManualAITask(){
-  aiTasks.push('');
-  const i=aiTasks.length-1;
-  aiTaskIndex=i;
-  editingAITaskIndex=i;
-  renderAITaskList();
-  document.getElementById('aiGoalInput').value='';
-  document.getElementById('aiStartBtn').style.display='inline-block';
-  taskPanelOpen=true;
-  document.getElementById('taskPanelBody').style.display='block';
-  document.getElementById('taskPanelIcon').style.transform='rotate(180deg)';
-  document.getElementById('aiGoalInput').focus();
+function addManualTask(state){
+  state.tasks.push('');
+  const i=state.tasks.length-1;
+  state.taskIndex=i;
+  state.editingIndex=i;
+  renderTaskList(state);
+  const inputEl=document.getElementById(state.inputId);
+  inputEl.value='';
+  if(state.mode==='plan')document.getElementById('charCount').textContent='0 字';
+  updateStartBtnState(state);
+  state.open=true;
+  document.getElementById(state.panelBodyId).style.display='block';
+  document.getElementById(state.panelIconId).style.transform='rotate(180deg)';
+  inputEl.focus();
 }
 
-function selectAITask(i){
-  aiTaskIndex=i;
-  editingAITaskIndex=i; // 进入「编辑该条」状态
-  renderAITaskList();
-  document.getElementById('aiGoalInput').value=aiTasks[i];
-  document.getElementById('aiStartBtn').style.display='inline-block';
+function selectTask(state,i){
+  state.taskIndex=i;
+  state.editingIndex=i; // 进入「编辑该条」状态
+  renderTaskList(state);
+  const text=state.tasks[i];
+  document.getElementById(state.inputId).value=text;
+  if(state.mode==='plan')document.getElementById('charCount').textContent=text.length+' 字';
+  updateStartBtnState(state);
 }
 
 // 在输入框里改字 → 同步到下方列表（仅文字，不重拆）
 document.getElementById('aiGoalInput').addEventListener('input',function(){
-  if(editingAITaskIndex!=null && editingAITaskIndex<aiTasks.length){
-    aiTasks[editingAITaskIndex]=this.value;
-    renderAITaskList();
+  if(aiState.editingIndex!=null && aiState.editingIndex<aiState.tasks.length){
+    aiState.tasks[aiState.editingIndex]=this.value;
+    renderTaskList(aiState);
   }
 });
 
@@ -1489,15 +1514,15 @@ function showAICurrentTask(text){
 }
 
 function startSessionFromAI(){
-  // 只能从列表选中任务后开始；不允许凭空打字直接开始
-  if(editingAITaskIndex==null || editingAITaskIndex<0 || editingAITaskIndex>=aiTasks.length)return;
+  // 只能从列表选中任务后开始；不允许凭空打字直接开始（【人】的规则本来就不变）
+  if(aiState.editingIndex==null || aiState.editingIndex<0 || aiState.editingIndex>=aiState.tasks.length)return;
   const text=document.getElementById('aiGoalInput').value.trim();
   if(!text)return;
-  runningAITaskIndex=editingAITaskIndex;
+  aiState.runningIndex=aiState.editingIndex;
   const aiTime=document.getElementById('startTimeInputAI').value;
   if(aiTime)document.getElementById('startTimeInput').value=aiTime;
-  updateEndTime();
-  // 此时才同步到 taskInput
+  updateEndTime('plan');
+  // 此时才同步到 taskInput（共享的计时引擎从这里读文本）
   taskInput.value=text;
   document.getElementById('carryNotice').style.display='none';
   taskInput.dispatchEvent(new Event('input'));
@@ -1507,7 +1532,7 @@ function startSessionFromAI(){
 // 「有别的任务要拆」：保留现有列表，清空输入框与上下文，下次拆解追加到末尾
 function askAnotherBatch(){
   appendMode=true;
-  editingAITaskIndex=null;
+  aiState.editingIndex=null;
   aiConversation=[];
   document.getElementById('aiGoalInput').value='';
   document.getElementById('aiGoalInput').placeholder='这次想拆什么？随便说，AI 接着往列表后面加。';
@@ -1579,7 +1604,7 @@ TASKS:
 async function askAI(){
   const input=document.getElementById('aiGoalInput').value.trim();
   if(!input)return;
-  editingAITaskIndex=null; // 点「让AI来拆」即把输入当作新指令，退出编辑某条的状态
+  aiState.editingIndex=null; // 点「让AI来拆」即把输入当作新指令，退出编辑某条的状态
   const key=['sk-e75e4','8ae373d4','e8db2841','d6466ebba68'].join('');
 
   const btn=document.getElementById('aiAskBtn');
@@ -1655,37 +1680,29 @@ async function askAI(){
 // 应用拆解结果：追加模式接在末尾并保留状态，否则替换并重置
 function applyParsedTasks(tasks){
   if(appendMode){
-    const base=aiTasks.length;
-    aiTasks=aiTasks.concat(tasks);
-    aiTaskIndex=base;                 // 选中第一条新任务
-    editingAITaskIndex=base;          // 视为"已从列表选中"，可直接开始
+    const base=aiState.tasks.length;
+    aiState.tasks=aiState.tasks.concat(tasks);
+    aiState.taskIndex=base;                 // 选中第一条新任务
+    aiState.editingIndex=base;              // 视为"已从列表选中"，可直接开始
     appendMode=false;
   } else {
-    aiTasks=tasks;
-    aiTaskIndex=0;
-    completedAITasks=new Set();
-    inProgressAITasks=new Set();
-    editingAITaskIndex=0;
+    aiState.tasks=tasks;
+    aiState.taskIndex=0;
+    aiState.completed=new Set();
+    aiState.inProgress=new Set();
+    aiState.editingIndex=0;
   }
-  renderAITaskList();
-  showAICurrentTask(aiTasks[aiTaskIndex]);
-}
-
-// 轮次结束后推进 AI 任务队列
-function advanceAITask(){
-  if(!aiTasks.length)return;
-  if(aiTaskIndex<aiTasks.length-1){
-    aiTaskIndex++;
-    renderAITaskList();
-    return aiTasks[aiTaskIndex];
-  }
-  return null;
+  renderTaskList(aiState);
+  showAICurrentTask(aiState.tasks[aiState.taskIndex]);
+  updateStartBtnState(aiState);
 }
 
 // close modal on overlay click
 document.getElementById('resetModal').addEventListener('click',function(e){if(e.target===this)closeReset();});
 
 initStartTime();
+renderTaskList(planState); // 【我】面板要一开始就露出来（哪怕0条），不能等用户先做点什么才出现
+renderTaskList(aiState);
 
 // ══════════════════ 引导动画 ══════════════════
 (function(){
