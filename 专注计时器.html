@@ -507,8 +507,15 @@ function updateStartBtnState(state){
 taskInput.addEventListener('input',()=>{
   const l=taskInput.value.trim().length;
   document.getElementById('charCount').textContent=l+' 字';
-  // 有选中某一条时，改字实时同步回列表对应条目（跟【人】一致）；没选中就是纯自由输入
-  if(planState.editingIndex!=null && planState.editingIndex<planState.tasks.length){
+  if(planState.tasks.length===0 && taskInput.value.trim().length>0){
+    // 0条时打下第一个字：就地创建第0条并进入编辑状态，效果等同于自动替用户点了一次「手动加一条」——
+    // 这样"打字直接开始"和"先手动加一条再打字"从第一个字起就是同一套状态，不再有谁多一步的区别
+    planState.tasks.push(taskInput.value);
+    planState.taskIndex=0;
+    planState.editingIndex=0;
+    renderTaskList(planState);
+  } else if(planState.editingIndex!=null && planState.editingIndex<planState.tasks.length){
+    // 有选中某一条时，改字实时同步回列表对应条目（跟【人】一致）；没选中就是纯自由输入（1条时允许，跟已有任务并存）
     planState.tasks[planState.editingIndex]=taskInput.value;
     renderTaskList(planState);
   }
