@@ -124,6 +124,34 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 .modal-body{font-size:14px;color:var(--text2);margin-bottom:1.25rem;line-height:1.6}
 .modal-btns{display:flex;gap:10px;justify-content:flex-end}
 
+/* ── 反馈：印章 / 完成后弹窗 / 详情弹窗 ──
+   全部是新增规则，上面 .modal-overlay / .modal-box 那几条原样不动，
+   否则会连累 resetModal、deleteTaskModal、onboardOverlay 三个已有弹窗 */
+.stmp path,.stmp circle{fill:none;stroke:currentColor}
+.stmp text{fill:currentColor;stroke:none;font-weight:600}
+.stmp-happy{color:var(--green-text)}
+.stmp-ok{color:var(--yellow-text)}
+.stmp-btn{background:none;border:none;padding:0;line-height:0;cursor:pointer;transition:transform .15s}
+.stmp-btn:hover{transform:scale(1.06)}
+.note-hint{font-size:12px;color:var(--text3);text-align:center;margin-bottom:12px}
+.note-stamps{display:flex;gap:18px;align-items:center;justify-content:center;margin-bottom:14px}
+.note-skip{background:none;border:none;padding:0;font-size:12px;color:var(--text3);text-decoration:underline;cursor:pointer}
+.note-skip:hover{color:var(--text2)}
+.fb-box{max-height:80vh;display:flex;flex-direction:column}
+.fb-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.fb-close{background:none;border:none;color:var(--text3);cursor:pointer;padding:2px;line-height:1;font-size:15px;flex-shrink:0}
+.fb-close:hover{color:var(--text)}
+.fb-count{font-size:12px;color:var(--text3);margin-bottom:1.2rem}
+.fb-list{overflow-y:auto;flex:1;min-height:0}
+.fb-row{padding-bottom:1rem;margin-bottom:1rem;border-bottom:1px solid var(--border)}
+.fb-row:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.fb-time{font-size:12px;color:var(--text3);margin-bottom:8px}
+.fb-text{font-size:14px;line-height:1.9;color:var(--text)}
+.fb-skip{color:var(--text3)}
+.fb-corner{position:relative}
+.fb-inline{display:flex;align-items:flex-start;min-height:70px}
+.fb-link{background:none;border:none;padding:0 2px;font-size:11px;color:var(--blue-text);text-decoration:underline;cursor:pointer;flex-shrink:0;white-space:nowrap}
+
 @media(max-width:480px){.wrap{padding:1.25rem .9rem 3rem}}
 
 /* ── 实时可视化方块 ── */
@@ -410,6 +438,43 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   </div>
 </div>
 
+<!-- 完成后的反馈弹窗：三条完成路径（提前结束选完成 / 倒计时到点 / 正计时点结束）共用一个，
+     两屏原地切换。刻意不给遮罩加点击关闭——出口只有「跳过」和盖章两种，都要落一条记录 -->
+<div class="modal-overlay" id="noteModal">
+  <div class="modal-box">
+    <div id="noteStep1">
+      <div class="modal-title">完成了</div>
+      <div class="modal-body" id="noteTaskLabel"></div>
+      <div class="modal-btns">
+        <button class="btn-ghost" onclick="noteSkip()">跳过</button>
+        <button class="btn-primary" onclick="noteToWrite()">写点反馈</button>
+      </div>
+    </div>
+    <div id="noteStep2" style="display:none">
+      <div class="modal-title">写点反馈</div>
+      <textarea id="noteInput" placeholder="随便写点，也可以不写，直接盖章" style="font-size:14px;margin-bottom:1.1rem"></textarea>
+      <div class="note-hint">选一枚印章保存</div>
+      <div class="note-stamps">
+        <button class="stmp-btn" id="noteStampHappy" onclick="noteStamp('happy')" aria-label="开心！"></button>
+        <button class="stmp-btn" id="noteStampOk" onclick="noteStamp('ok')" aria-label="完成就行！"></button>
+      </div>
+      <button class="note-skip" onclick="noteSkip()">跳过</button>
+    </div>
+  </div>
+</div>
+
+<!-- 反馈详情弹窗：【我】【人】共用，由「查看反馈」链接打开 -->
+<div class="modal-overlay" id="fbModal">
+  <div class="modal-box fb-box">
+    <div class="fb-head">
+      <div class="modal-title" id="fbTaskLabel" style="margin-bottom:2px"></div>
+      <button class="fb-close" onclick="closeFbDetail()" aria-label="关闭">✕</button>
+    </div>
+    <div class="fb-count" id="fbCount"></div>
+    <div class="fb-list" id="fbList"></div>
+  </div>
+</div>
+
 <script>
 const DURATION=30*60;
 let timeLeft=DURATION,timerInterval=null,restInterval=null;
@@ -433,6 +498,7 @@ let feedbackContext='normal';    // 'normal' | 'earlyPlan' | 'earlyAI'
 // 开始按钮判定）都是通用函数，接收 state 参数决定操作哪一套，不再各写一份 ──
 const planState={
   mode:'plan', tasks:[], completed:new Set(), inProgress:new Set(),
+  feedbacks:{}, // 按任务下标存：{下标:[{time,text,mood}]}，mood 为 null 表示这一轮跳过了
   taskIndex:-1, editingIndex:null, runningIndex:null, open:true,
   inputId:'taskInput', startBtnId:'startBtn',
   listId:'planTaskList', panelId:'planTaskPanel', panelLabelId:'planTaskPanelLabel',
@@ -440,6 +506,7 @@ const planState={
 };
 const aiState={
   mode:'ai', tasks:[], completed:new Set(), inProgress:new Set(),
+  feedbacks:{}, // 结构与【我】完全对称，两边各存各的，切换选项卡互不可见
   taskIndex:-1, editingIndex:null, runningIndex:null, open:true,
   inputId:'aiGoalInput', startBtnId:'aiStartBtn',
   listId:'aiTaskList', panelId:'aiTaskPanel', panelLabelId:'taskPanelLabel',
@@ -540,6 +607,12 @@ function startSession(){
     }
     renderTaskList(planState);
   }
+  // 重开一条已完成的任务：把它从 completed 里放出来，删除线撤掉，后续没做完时
+  // markInProgress() 那道 !completed.has() 的守卫才会放行、列表才能显示「进行中」。
+  // 放在这里是因为此刻两边的 runningIndex 都已就位——【我】刚在上面那个分支里设好，
+  // 【人】是在 startSessionFromAI() 里设好之后才调进来的，所以一处代码覆盖两个模块
+  const reopenState=currentTab==='ai'?aiState:planState;
+  if(reopenState.runningIndex!=null&&reopenState.completed.delete(reopenState.runningIndex))renderTaskList(reopenState);
   sessionCount++;timeLeft=DURATION;isPaused=false;
   deadlineTs=Date.now()+DURATION*1000; // 方案一：记录目标结束时间戳
   pausedTimeLeft=null;
@@ -746,8 +819,11 @@ function confirmEarlyChoice(){
   // 'done'：任务段算 100% 完成，休息段单独成行
   commitSegments(100,true,earlyEndTime);
   lastUnfinishedTask=null;
+  // 反馈要用的三样东西必须在 returnToSetup 之前抓走：它会把选中态挪到下一条任务上
+  const noteIdx=state.runningIndex,noteTime=earlyEndTime,noteText=currentTask;
   markComplete(state);
   returnToSetup(currentTab,earlyEndTime,true);
+  openNoteModal(state,noteIdx,noteTime,noteText); // 先结算再弹窗，弹窗底下的设置页已经归位好了
 }
 
 // ── 收尾回到设置页：【我】【人】共用一个函数，mode 决定操作哪一套 state ──
@@ -897,8 +973,11 @@ function markDone(){
   commitSegments(100,true,sessionEndTime);
   lastUnfinishedTask=null;
   const state=currentTab==='ai'?aiState:planState;
+  // 同上：returnToSetup 内部会重新调 updateEndTime 覆盖掉 sessionEndTime，所以先抓走
+  const noteIdx=state.runningIndex,noteTime=sessionEndTime,noteText=currentTask;
   markComplete(state);
   returnToSetup(currentTab,sessionEndTime,true);
+  openNoteModal(state,noteIdx,noteTime,noteText);
 }
 function markPartial(){
   const pct=parseInt(document.getElementById('progressSlider').value);
@@ -923,6 +1002,159 @@ function markPartial(){
   markInProgress(state);
   lastUnfinishedTask=currentTask;
   returnToSetup(currentTab,sessionEndTime,false,state.runningIndex,currentTask);
+}
+
+// ══════════════════ 反馈 ══════════════════
+// 只有「完成」才问反馈：入口就是上面 markDone() 和 confirmEarlyChoice() 的 done 分支两处。
+// 「记录进度」（未完成）和休息段都不问。全部函数【我】【人】共用，靠传进来的 state 分流。
+
+const STAMP_W=86;        // 详情里盖下的印章宽度
+const STAMP_OVERLAP=30;  // 压句末时往回压住文字的量
+// 压句末还是盖右下角，靠这个阈值判：文字自然宽度超过它，句末后面就塞不下印章了。
+// 写成公式而不是魔法数字——以后调 STAMP_W 或 STAMP_OVERLAP，阈值自己跟着变
+function stampLimit(containerWidth){return containerWidth-(STAMP_W-STAMP_OVERLAP);}
+
+// 两枚印章共用一个生成器，避免同一份路径数据在弹窗和详情里各抄一遍。
+// pressed=true 是「已盖下」：粗描边 + 倾斜；false 是弹窗里可点的「未盖下」：细描边、不歪。
+// 星形的 viewBox 收紧到了墨迹本身（19.8 14 110.4 104.9），外框等于墨迹，
+// 负 margin 挪多少就真挪多少；用 0 0 150 150 的话四周留白会把偏移吃掉一大截
+function stampSVG(mood,pressed,style){
+  const s1=pressed?3:1.5,s2=pressed?0.8:0.5;
+  const rot=pressed?(mood==='happy'?-14:9):0;
+  const st=(style||'')+(rot?';transform:rotate('+rot+'deg)':'');
+  if(mood==='happy'){
+    const w=pressed?STAMP_W:96,rw=pressed?2:1.2;
+    const rays=['M55 8 L55 2','M89 21 L93 17','M102 55 L108 55','M89 89 L93 93',
+                'M55 102 L55 108','M21 89 L17 93','M8 55 L2 55','M21 21 L17 17']
+      .map(d=>'<path d="'+d+'" stroke-width="'+rw+'" stroke-linecap="round"/>').join('');
+    return '<svg class="stmp stmp-happy" width="'+w+'" height="'+w+'" viewBox="0 0 110 110" aria-hidden="true" style="'+st+'">'+
+      '<circle cx="55" cy="55" r="40" stroke-width="'+s1+'"/>'+
+      '<circle cx="55" cy="55" r="33" stroke-width="'+s2+'"/>'+
+      '<text x="55" y="62" text-anchor="middle" font-size="19">开心！</text>'+rays+'</svg>';
+  }
+  const w=pressed?STAMP_W:100,h=pressed?Math.round(STAMP_W*104.9/110.4):95;
+  return '<svg class="stmp stmp-ok" width="'+w+'" height="'+h+'" viewBox="19.8 14 110.4 104.9" aria-hidden="true" style="'+st+'">'+
+    '<path d="M75 14 L92 48.5 L130.2 54.1 L102.6 81 L109.1 118.9 L75 101 L40.9 118.9 L47.4 81 L19.8 54.1 L58 48.5 Z" stroke-width="'+s1+'" stroke-linejoin="round"/>'+
+    '<path d="M75 24 L89.1 52.6 L120.7 57.2 L97.8 79.4 L103.2 110.8 L75 96 L46.8 110.8 L52.2 79.4 L29.3 57.2 L60.9 52.6 Z" stroke-width="'+s2+'" stroke-linejoin="round"/>'+
+    '<text x="75" y="68" text-anchor="middle" font-size="13">完成就行！</text></svg>';
+}
+
+function pushFeedback(state,idx,rec){
+  if(idx==null||idx<0)return;
+  if(!state.feedbacks[idx])state.feedbacks[idx]=[];
+  state.feedbacks[idx].push(rec);
+}
+// 「查看反馈」链接的显示条件：这条任务的记录里至少有一条不是跳过。
+// 所以重开多次每次都跳过 → 数据里躺着好几条，但链接依然不出现
+function hasRealFeedback(state,idx){
+  const arr=state.feedbacks[idx];
+  return !!(arr&&arr.some(r=>r.mood));
+}
+
+// ── 完成后的弹窗 ──
+let pendingNote=null; // {state, idx, time}
+function openNoteModal(state,idx,time,taskText){
+  if(idx==null||idx<0)return; // 没有对应的列表条目就没地方挂反馈，直接不问
+  pendingNote={state,idx,time:time||nowHM()};
+  document.getElementById('noteTaskLabel').textContent=taskText||'';
+  document.getElementById('noteInput').value='';
+  document.getElementById('noteStep1').style.display='block';
+  document.getElementById('noteStep2').style.display='none';
+  document.getElementById('noteModal').classList.add('show');
+}
+function noteToWrite(){
+  document.getElementById('noteStep1').style.display='none';
+  document.getElementById('noteStep2').style.display='block';
+  document.getElementById('noteInput').focus();
+}
+function closeNoteModal(){
+  document.getElementById('noteModal').classList.remove('show');
+  const st=pendingNote?pendingNote.state:null;
+  pendingNote=null;
+  if(st)renderTaskList(st); // 重渲染一次，「查看反馈」链接才会立刻出现
+}
+// 两屏的「跳过」走同一个函数，落的记录也完全一样：时间 + 跳过，不带印章
+function noteSkip(){
+  if(!pendingNote)return;
+  pushFeedback(pendingNote.state,pendingNote.idx,{time:pendingNote.time,text:'',mood:null});
+  closeNoteModal();
+}
+// 点印章就是提交，可以不写字直接盖；写了字又点跳过的话那段字不算数
+function noteStamp(mood){
+  if(!pendingNote)return;
+  const text=document.getElementById('noteInput').value.trim();
+  pushFeedback(pendingNote.state,pendingNote.idx,{time:pendingNote.time,text,mood});
+  closeNoteModal();
+}
+
+// ── 反馈详情 ──
+function openFbDetail(state,i){
+  const recs=state.feedbacks[i]||[];
+  document.getElementById('fbTaskLabel').textContent=state.tasks[i]||'';
+  document.getElementById('fbCount').textContent=recs.length+' 条记录';
+  const list=document.getElementById('fbList');
+  list.innerHTML='';
+  recs.forEach(r=>list.appendChild(buildFbRow(r)));
+  document.getElementById('fbModal').classList.add('show');
+  layoutFbStamps(); // 必须在 .show 之后：display:none 的元素量出来的宽度全是 0
+}
+function closeFbDetail(){document.getElementById('fbModal').classList.remove('show');}
+
+function buildFbRow(r){
+  const row=document.createElement('div');
+  row.className='fb-row';
+  const tm=document.createElement('div');
+  tm.className='fb-time';
+  tm.textContent=r.time||'';
+  row.appendChild(tm);
+  if(!r.mood){
+    const b=document.createElement('div');
+    b.className='fb-text fb-skip';
+    b.textContent='跳过';
+    row.appendChild(b);
+    return row;
+  }
+  // 时间戳到正文的距离所有条目一律相同，不因为印章怎么摆而变——排版差异只发生在正文这一层以下
+  const body=document.createElement('div');
+  body.className='fb-body';
+  body.dataset.mood=r.mood;
+  const span=document.createElement('span');
+  span.className='fb-text';
+  span.textContent=r.text||'';
+  body.appendChild(span);
+  row.appendChild(body);
+  return row;
+}
+
+// 量文字「不换行时的自然宽度」：一个数同时覆盖单行和多行，不用先数行数再分情况
+function naturalWidth(el){
+  const prev=el.style.whiteSpace;
+  el.style.whiteSpace='nowrap';
+  const w=el.getBoundingClientRect().width;
+  el.style.whiteSpace=prev;
+  return w;
+}
+function layoutFbStamps(){
+  const list=document.getElementById('fbList');
+  const limit=stampLimit(list.clientWidth);
+  list.querySelectorAll('.fb-body').forEach(body=>{
+    const mood=body.dataset.mood;
+    const span=body.querySelector('.fb-text');
+    const old=body.querySelector('svg');
+    if(old)old.remove();
+    body.className='fb-body';
+    if(naturalWidth(span)<=limit){
+      // 短：压在句末。文字为空时不做负偏移，否则印章会被推到弹窗外面去
+      body.classList.add('fb-inline');
+      const ml=span.textContent.length?-STAMP_OVERLAP:0;
+      const mt=mood==='happy'?-28:-20; // 圆章墨迹填满外框、星章上窄下宽，各自的腰线位置不同
+      body.insertAdjacentHTML('beforeend',stampSVG(mood,true,'flex-shrink:0;opacity:.45;pointer-events:none;margin:'+mt+'px 0 0 '+ml+'px'));
+    } else {
+      // 长：盖右下角
+      body.classList.add('fb-corner');
+      body.insertAdjacentHTML('beforeend',stampSVG(mood,true,'position:absolute;right:-6px;bottom:-2px;opacity:.45;pointer-events:none'));
+    }
+  });
 }
 
 function makeVisBlock(BW,BH,BR,fillAmt,isRed){
@@ -1039,7 +1271,7 @@ function doReset(){
   timerMode='down';overtimeBaseSec=0;overtimeSegStart=null;currentBlocks=1;isPaused=false;
   isResting=false;segments=[];segBaseSec=0;segStart=null;
   [planState,aiState].forEach(s=>{
-    s.tasks=[];s.completed=new Set();s.inProgress=new Set();
+    s.tasks=[];s.completed=new Set();s.inProgress=new Set();s.feedbacks={};
     s.taskIndex=-1;s.editingIndex=null;s.runningIndex=null;
   });
   appendMode=false;aiConversation=[];
@@ -1387,6 +1619,17 @@ function renderTaskList(state){
       tag.textContent='进行中';
       div.appendChild(tag);
     }
+    // 「查看反馈」：只有已完成、且记录里至少有一条不是跳过的任务才有。
+    // 用 <button> 是刻意的——上面 pointerdown 里那道 closest('button') 守卫会自动豁免它，
+    // 拖拽逻辑一个字都不用改
+    if(done&&hasRealFeedback(state,i)){
+      const fbBtn=document.createElement('button');
+      fbBtn.className='fb-link';
+      fbBtn.textContent='查看反馈';
+      fbBtn.title='查看这条任务的反馈';
+      fbBtn.onclick=e=>{e.stopPropagation();openFbDetail(state,i);};
+      div.appendChild(fbBtn);
+    }
     const delBtn=document.createElement('button');
     delBtn.innerHTML='<i class="ti ti-x" style="font-size:13px"></i>';
     delBtn.title='删除这条任务';
@@ -1437,12 +1680,23 @@ function remapSetAfterRemove(set,removedIdx){
   set.forEach(idx=>{if(idx!==removedIdx)ns.add(idx>removedIdx?idx-1:idx);});
   return ns;
 }
+// feedbacks 是按下标存的对象，套不上上面那两个给 Set 用的，单独来一份
+function remapMapAfterRemove(map,removedIdx){
+  const nm={};
+  Object.keys(map).forEach(k=>{
+    const idx=Number(k);
+    if(idx===removedIdx)return; // 任务删了，它的反馈跟着删
+    nm[idx>removedIdx?idx-1:idx]=map[k];
+  });
+  return nm;
+}
 function confirmDeleteTask(){
   if(!pendingDelete)return;
   const{state,idx:i}=pendingDelete;
   state.tasks.splice(i,1);
   state.completed=remapSetAfterRemove(state.completed,i);
   state.inProgress=remapSetAfterRemove(state.inProgress,i);
+  state.feedbacks=remapMapAfterRemove(state.feedbacks,i);
   state.taskIndex=remapIndexAfterRemove(state.taskIndex,i);
   state.editingIndex=remapIndexAfterRemove(state.editingIndex,i);
   state.runningIndex=remapIndexAfterRemove(state.runningIndex,i);
@@ -1468,12 +1722,19 @@ function remapSetAfterMove(set,from,to){
   set.forEach(idx=>ns.add(remapIndexAfterMove(idx,from,to)));
   return ns;
 }
+// 拖动改了顺序，反馈跟着任务一起走
+function remapMapAfterMove(map,from,to){
+  const nm={};
+  Object.keys(map).forEach(k=>{nm[remapIndexAfterMove(Number(k),from,to)]=map[k];});
+  return nm;
+}
 function moveTask(state,from,to){
   if(from===to)return;
   const item=state.tasks.splice(from,1)[0];
   state.tasks.splice(to,0,item);
   state.completed=remapSetAfterMove(state.completed,from,to);
   state.inProgress=remapSetAfterMove(state.inProgress,from,to);
+  state.feedbacks=remapMapAfterMove(state.feedbacks,from,to);
   state.taskIndex=remapIndexAfterMove(state.taskIndex,from,to);
   state.editingIndex=remapIndexAfterMove(state.editingIndex,from,to);
   state.runningIndex=remapIndexAfterMove(state.runningIndex,from,to);
@@ -1707,6 +1968,9 @@ function applyParsedTasks(tasks){
 document.getElementById('resetModal').addEventListener('click',function(e){if(e.target===this)closeReset();});
 
 initStartTime();
+// 弹窗里那两枚可点的印章由同一个生成器出，跟详情里盖下的那两枚共用一份路径数据
+document.getElementById('noteStampHappy').innerHTML=stampSVG('happy',false,'');
+document.getElementById('noteStampOk').innerHTML=stampSVG('ok',false,'');
 renderTaskList(planState); // 【我】面板要一开始就露出来（哪怕0条），不能等用户先做点什么才出现
 renderTaskList(aiState);
 
