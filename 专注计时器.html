@@ -2188,12 +2188,15 @@ async function askAI(){
 
 // 2.1 要把原有子树一并喂过去，否则模型会拆出重复的子任务
 function buildAiUserMessage(mode,input,target){
+  // 已有的子任务一律喂给模型：它是无状态的，不写进这条消息它就看不见，挡不住重复
+  const kids=target?(target.children||[]).map(c=>'  - '+c.text).join('\n'):'';
+  const kidsBlock=kids?('\n它已有的子任务（新拆的不要和这些重复，换个说法表达同一件事也算重复）：\n'+kids):'';
   if(mode==='2.1'){
-    const kids=(target.children||[]).map(c=>'  - '+c.text).join('\n');
-    return '请顺着下面这条任务往下拆一层子任务。\n任务：'+input+
-      (kids?('\n它已有的子任务（不要重复）：\n'+kids):'');
+    return '请顺着下面这条任务往下拆一层子任务。\n'+
+      '第一行请照抄原任务名，不要改写。\n任务：'+input+kidsBlock;
   }
-  return '请把下面这段内容拆成一条父任务和它的子任务。\n'+input;
+  return '下面这段内容是一段随手写的话，不是任务名。\n'+
+    '请提炼出它的行动锚点作为父任务名（不要只截取其中一句），再拆出子任务。\n内容：'+input+kidsBlock;
 }
 
 // 解析 + 落地。整段失败就什么都不动，让用户重试。
@@ -2204,13 +2207,13 @@ function handleAiReply(reply,target){
     return;
   }
   const tree=parsed.node;
-  if(target&&target.aiTouched){
-    // 2.1：保留原有子树，新拆的并在后面，由用户在确认框里取舍
-    tree.children=(target.children||[]).concat(tree.children);
-  }
+  const newKids=tree.children.slice();      // 模型这次新生成的那几条，只有它们该被打标记
+  // 子任务一律保留：原有的在前、新拆的并在后面，由用户在确认框里取舍。
+  // 2.2 的节点本来就没有子任务，所以这里对它是空操作，不需要分模式。
+  if(target)tree.children=(target.children||[]).concat(tree.children);
   // 列表空时的初始拆直接落地，不弹框；非空时的 AI 操作都走确认框
   if(!planState.tasks.length){
-    applyAiTree(null,tree);
+    applyAiTree(target,tree,newKids);
     return;
   }
   openConfirmTree({
@@ -2220,7 +2223,7 @@ function handleAiReply(reply,target){
     onConfirm:(tasks)=>{
       const t=tasks[0];
       if(!t)return;
-      applyAiTree(target?target.id:null,t);
+      applyAiTree(target,t,newKids);
     }
   });
 }
@@ -2257,6 +2260,12 @@ function markAiTouched(node){
   node.aiTouched=true;
   (node.children||[]).forEach(markAiTouched);
 }
+// 只给「模型这次新生成的那几条」打标记。标记逐节点独立、不沿树传播，
+// 所以接进来的旧子树（可能是你手动加的）原样不动。
+function markAiTouchedNew(root,newKids){
+  root.aiTouched=true;
+  (newKids||[]).forEach(markAiTouched);
+}
 
 // 把一棵新树替换到目标节点原来的位置（2.1 / 2.2 共用）
 function replaceNodeWith(state,targetId,newTree){
@@ -2268,14 +2277,25 @@ function replaceNodeWith(state,targetId,newTree){
 
 // 拆解结果落地。targetId 为 null = 列表原本是空的，直接落到顶层。
 // 这里是「当天任务树定稿」的唯一收口，将来要做跨天历史存档就挂在这一处。
-function applyAiTree(targetId,tree){
-  markAiTouched(tree);
-  if(targetId!=null&&findNode(planState,targetId)){
-    replaceNodeWith(planState,targetId,tree);
+function applyAiTree(target,tree,newKids){
+  markAiTouchedNew(tree,newKids);
+  let landed=tree;
+  if(target&&findNode(planState,target.id)){
+    if(target.aiTouched){
+      // 2.1：这条留着，只往它底下加子任务。节点对象自始至终是同一个，
+      // 所以反馈、完成状态、id 不需要任何人搬运，天然就在。模型返回的父名丢弃，沿用原名。
+      target.children=tree.children;
+      target.aiTouched=true;
+      landed=target;
+    } else {
+      // 2.2：这条只是一段随手写的话，语义上就该被 AI 起的任务名替换掉。
+      // 这种节点没被专注过，身上不会有反馈，没有东西需要接住。
+      replaceNodeWith(planState,target.id,tree);
+    }
   } else {
     planState.tasks.unshift(tree);
   }
-  setSel(planState,[tree.id]);
+  setSel(planState,[landed.id]);
   planState.editingId=null;
   renderTaskList(planState);
   syncDialog(planState);
