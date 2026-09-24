@@ -460,6 +460,8 @@ let deadlineTs=null,pausedTimeLeft=null; // 方案一：时间戳计时
 let timerMode='down';            // 'down' 倒计时 | 'buffer' 8秒缓冲 | 'up' 正计时
 let bufferInterval=null,bufferLeft=8;
 let overtimeBaseSec=0,overtimeSegStart=null; // 正计时累计 + 当前运行段起点
+const BUFFER_SEC=8;          // 归零后的缓冲秒数
+let bufferEndTs=null;        // 缓冲结束的绝对时刻（= deadlineTs + BUFFER_SEC）
 let currentBlocks=1;             // 本轮结算时写入 history 的方块数
 // ── 休息（影子任务，与计时共享同一条时间线） ──
 let isResting=false;             // 当前显示名是否为「休息」
@@ -642,7 +644,7 @@ function startSession(){
   sessionCount++;timeLeft=DURATION;isPaused=false;
   deadlineTs=Date.now()+DURATION*1000; // 方案一：记录目标结束时间戳
   pausedTimeLeft=null;
-  timerMode='down';overtimeBaseSec=0;overtimeSegStart=null;currentBlocks=1;
+  timerMode='down';overtimeBaseSec=0;overtimeSegStart=null;bufferEndTs=null;currentBlocks=1;
   isResting=false;segments=[];segBaseSec=0;segStart=Date.now();
   document.getElementById('restingNote').style.display='none';
   document.getElementById('restToggleBtn').textContent='休息 ☕';
@@ -665,11 +667,12 @@ function startSession(){
 }
 
 // ── 分段计时：把"自然流逝的这一段"按当前显示名落一笔，再切换到新名字 ──
-function currentSegElapsedSec(){
-  return segBaseSec+(isPaused?0:(Date.now()-segStart)/1000);
+function currentSegElapsedSec(endTs){
+  const end=(endTs==null?Date.now():endTs);
+  return segBaseSec+(isPaused?0:Math.max(0,end-segStart)/1000);
 }
-function flushSegment(){
-  const sec=currentSegElapsedSec();
+function flushSegment(endTs){
+  const sec=currentSegElapsedSec(endTs);
   const mins=sec/60;
   if(mins>0.0167){ // 至少 1 秒，避免 0 分钟噪音段
     const name=isResting?'休息':currentTask;
@@ -677,7 +680,7 @@ function flushSegment(){
     if(last&&last.name===name)last.mins+=mins;
     else segments.push({name,mins});
   }
-  segBaseSec=0;segStart=Date.now();
+  segBaseSec=0;segStart=(endTs==null?Date.now():endTs);
 }
 function toggleRest(){
   if(timerMode!=='down')return; // 正计时阶段不提供休息入口
@@ -702,8 +705,10 @@ function tick(){
 
 // ── 倒计时归零：8 秒缓冲，什么都不点则自动转正计时 ──
 function enterBuffer(){
-  flushSegment(); // 把走到归零这一刻的分段（任务或休息）落一笔
-  timerMode='buffer';bufferLeft=8;
+  flushSegment(deadlineTs); // 按目标结束时刻落这一笔，后台滞留的时间不算进本轮任务
+  timerMode='buffer';
+  bufferEndTs=deadlineTs+BUFFER_SEC*1000;   // 锚在钟上，不靠数 tick
+  bufferLeft=Math.max(0,Math.ceil((bufferEndTs-Date.now())/1000));
   document.getElementById('pauseBtn').style.display='none';
   document.getElementById('earlyBtn').style.display='none';
   document.getElementById('overtimeStopBtn').style.display='none';
@@ -715,9 +720,10 @@ function enterBuffer(){
   banner.style.display='block';
   document.getElementById('bufferCountdown').textContent=bufferLeft;
   clearInterval(bufferInterval);
+  if(bufferLeft<=0){clearInterval(bufferInterval);enterOvertime();return;} // 后台待太久，缓冲早就过了
   bufferInterval=setInterval(()=>{
-    bufferLeft--;
-    document.getElementById('bufferCountdown').textContent=Math.max(0,bufferLeft);
+    bufferLeft=Math.max(0,Math.ceil((bufferEndTs-Date.now())/1000));
+    document.getElementById('bufferCountdown').textContent=bufferLeft;
     if(bufferLeft<=0){clearInterval(bufferInterval);enterOvertime();}
   },1000);
 }
@@ -734,8 +740,11 @@ function endRoundFromBuffer(){
 // 进入正计时（继续累计归零那一刻正在显示的名字：任务或休息）
 function enterOvertime(){
   timerMode='up';isPaused=false;
-  overtimeBaseSec=0;overtimeSegStart=Date.now();
-  segBaseSec=0;segStart=Date.now(); // 分段时钟跟正计时同步重新起算
+  // 起点锚在缓冲结束那一刻（目标结束+8秒），不是用户切回页面的时刻：
+  // 页面在后台时定时器会被节流甚至冻结，用 Date.now() 会把这段时间整个丢掉
+  const startTs=(bufferEndTs||Date.now());
+  overtimeBaseSec=0;overtimeSegStart=startTs;
+  segBaseSec=0;segStart=startTs; // 分段时钟跟正计时同步起算
   document.getElementById('overtimeBuffer').style.display='none';
   document.getElementById('pauseBtn').style.display='';
   document.getElementById('pauseBtn').textContent='暂停';
@@ -2017,31 +2026,111 @@ function nodeBlocksMerge(node){
 function mergeBlockedIds(state){
   return state.selectedIds.filter(id=>nodeBlocksMerge(findNode(state,id)));
 }
-// 自底向上：每个被选中的节点原地展开成它的孩子
-function dissolveSelected(state,ids){
-  const set=new Set(ids);
-  (function walk(list){
-    for(let i=list.length-1;i>=0;i--){
-      const n=list[i];
-      walk(n.children||[]);
-      if(set.has(n.id))list.splice(i,1,...(n.children||[]));
-    }
-  })(state.tasks);
+// ══════════════ 合并：7 条规则 ══════════════
+// 1/2 同父非顶层 → 新节点落该父下最前，被合并节点的子女全部平铺到新节点下
+// 3   顶层合并   → 新节点落顶层最前，子女同样平铺到新节点下
+// 4/5 不同父同层 → 新节点独立；作为中间步骤时「悬空」（只记层级、不落位），最后一步才落顶层最前
+// 6/7 不同父不同层 → 新节点顶替最浅那条的槽位；最浅那条剩下的子女接到新节点上，
+//                    其余被合并节点的子女升一级填各自空出来的槽位
+// 落点不唯一（最浅那层不止一条）时自动拆步：任意两条必定合法，拆步不暴露给用户。
+// 兄弟次序一律按「原树中的出现次序」排，保证结果与拆步路径无关。
+function mergeAssignSeq(tasks){let i=0;(function w(l){for(const n of l){n.__seq=i++;w(n.children||[]);}})(tasks);}
+function mergeFind(tasks,id){let hit=null;(function w(l){for(const n of l){if(n.id===id){hit=n;return;}w(n.children||[]);}})(tasks);return hit;}
+function mergeSortSeq(list){list.sort((a,b)=>((a.__seq==null?-1:a.__seq)-(b.__seq==null?-1:b.__seq)));return list;}
+
+function mergeClassify(tasks,floats,ids){
+  const idx={};
+  (function w(l,d,p){for(const n of l){idx[n.id]={depth:d,parent:p};w(n.children||[],d+1,n.id);}})(tasks,0,'ROOT');
+  const info={};
+  ids.forEach(id=>{info[id]=(floats[id]!=null)?{depth:floats[id],parent:'#f:'+id}:idx[id];});
+  const depths=ids.map(id=>info[id].depth);
+  const dmin=Math.min.apply(null,depths);
+  const M=ids.filter(id=>info[id].depth===dmin);
+  const sameParent=new Set(ids.map(id=>info[id].parent)).size===1;
+  const sameDepth=new Set(depths).size===1;
+  const hasKids=ids.some(id=>{
+    if(floats[id]!=null)return false;
+    const n=mergeFind(tasks,id);return !!(n&&n.children&&n.children.length);
+  });
+  let rule;
+  if(sameParent&&dmin!==0)   rule=hasKids?1:2;
+  else if(sameParent)        rule=3;
+  else if(sameDepth)         rule=hasKids?4:5;
+  else                       rule=hasKids?6:7;
+  const unique=(rule===6||rule===7)?(M.length===1):true;
+  return {rule,unique,M,info};
 }
+
+function mergeStep(tasks,floats,ids,nn,final){
+  const c=mergeClassify(tasks,floats,ids);
+  const S=new Set(ids);
+  const host=(c.rule===6||c.rule===7)?c.M[0]:null;
+  const hostIsFloat=host!=null&&floats[host]!=null;
+  const flatten=(c.rule<=3);
+  let collected=[];
+  const rebuild=(list)=>{
+    const out=[];
+    for(const n of list){
+      const kids=rebuild(n.children||[]);
+      if(S.has(n.id)){
+        if(n.id===host){nn.children=kids;nn.__seq=n.__seq;out.push(nn);}
+        else if(flatten){collected=collected.concat(kids);}
+        else {for(const k of kids)out.push(k);}   // 子女升一级，填它空出来的槽位
+      } else {n.children=kids;out.push(n);}
+    }
+    return mergeSortSeq(out);
+  };
+  let t=rebuild(tasks);
+  const nf={};Object.keys(floats).forEach(k=>{if(!S.has(k))nf[k]=floats[k];});
+  if(c.rule===1||c.rule===2){
+    nn.children=mergeSortSeq(collected);nn.__seq=-1;
+    const p=mergeFind(t,c.info[ids[0]].parent);
+    if(p){p.children.push(nn);mergeSortSeq(p.children);}
+  } else if(c.rule===3){
+    nn.children=mergeSortSeq(collected);nn.__seq=-1;t.unshift(nn);
+  } else if(c.rule===4||c.rule===5){
+    if(final){nn.__seq=-1;t.unshift(nn);}
+    else nf[nn.id]=c.info[c.M[0]].depth;          // 悬空：只记层级
+  } else if(hostIsFloat){
+    // 悬空节点没有槽位可顶替 → 悬空性传染，结果继续悬空，只在最后一步落地
+    if(final){nn.__seq=-1;t.unshift(nn);}
+    else nf[nn.id]=floats[host];
+  }
+  return {tasks:t,floats:nf};
+}
+
+// 返回 {tasks, node}：把 ids 合并成一条标题为 title 的新节点后的整棵树
+function computeMerge(tasks,ids,title){
+  mergeAssignSeq(tasks);
+  let cur=tasks,floats={},sel=ids.slice(),guard=0;
+  while(guard++<64){
+    const c=mergeClassify(cur,floats,sel);
+    if(c.unique){
+      const nn=newNode(title);
+      return {tasks:mergeStep(cur,floats,sel,nn,true).tasks,node:nn};
+    }
+    const rep=newNode('');                        // 中间代表，标题最后才生成
+    const r=mergeStep(cur,floats,[sel[0],sel[1]],rep,false);
+    cur=r.tasks;floats=r.floats;
+    sel=sel.slice(2).concat([rep.id]);
+  }
+  return {tasks:cur,node:null};
+}
+
 function onMergeClick(){
   if(selCount(planState)<2)return;
   if(mergeBlockedIds(planState).length)return;
   const ids=planState.selectedIds.slice();
   const picked=ids.map(id=>findNode(planState,id)).filter(Boolean).map(n=>n.text);
-  // TODO: 这里接 AI 概括；本地先用占位，好把确认框整条链路走通
+  // TODO: 这里接 AI 概括（只要一行标题，结构全部由上面的规则算）；本地先用占位
   const summary=fakeSummarize(picked);
   openConfirmTree({
     title:'合并成一条',
     label:'概括结果',
-    tasks:[newNode(summary)],
+    tasks:[newNode(summary)],      // 框里只显示一行标题
     onConfirm:(tasks)=>{
-      dissolveSelected(planState,ids);
-      planState.tasks.unshift(...tasks);   // 新节点落在顶层最前
+      const t=tasks[0];if(!t)return;
+      planState.tasks=computeMerge(planState.tasks,ids,t.text).tasks;
       setSel(planState,[]);
     }
   });
