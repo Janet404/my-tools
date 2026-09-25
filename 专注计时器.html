@@ -655,6 +655,10 @@ function startSession(){
   document.getElementById('overtimeStopBtn').style.display='none';
   document.getElementById('pauseBtn').style.display='';
   document.getElementById('timerSubLabel').textContent='剩余';
+  // 显示和记录的开始时间一律以「点开始的这一刻」为准，跟计时终点 deadlineTs 用同一个时刻：
+  // 刷新按钮保留，但刷不刷新都不影响——点开始时这里统一覆盖一次
+  const clickAt=new Date(deadlineTs-DURATION*1000);
+  document.getElementById('startTimeInput').value=fmt(clickAt.getHours())+':'+fmt(clickAt.getMinutes());
   sessionStartTime=document.getElementById('startTimeInput').value;
   updateEndTime('plan');
   document.getElementById('timerTaskLabel').textContent=currentTask;
