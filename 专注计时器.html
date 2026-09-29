@@ -1984,7 +1984,10 @@ function buildInlineInput(state,node,depth){
     else if(e.key==='Escape'){finish(false);}
   });
   inp.addEventListener('pointerdown',e=>e.stopPropagation());
-  setTimeout(()=>{inp.focus();inp.select();},0);
+  // 原文填进框里：双击改已有任务时要看到原来的字（空白条原文就是空，不受影响）
+  inp.value=original;
+  // 光标落在末尾闪烁，不全选；没改就点别处 = 保持原文
+  setTimeout(()=>{inp.focus();const n=inp.value.length;try{inp.setSelectionRange(n,n);}catch(e){}},0);
   return inp;
 }
 
@@ -2124,30 +2127,92 @@ function computeMerge(tasks,ids,title){
   return {tasks:cur,node:null};
 }
 
-function onMergeClick(){
+// 某个节点的父节点（顶层返回 null）
+function parentNodeOf(state,id){
+  let hit=null;
+  (function walk(list,parent){for(const n of list||[]){if(n.id===id){hit=parent;return;}walk(n.children,n);}})(state.tasks,null);
+  return hit;
+}
+// 用七条规则先算一遍落点：结构和标题无关，所以拿占位标题在副本上跑，不动真树
+function mergeLandsAtTop(ids){
+  const probe=computeMerge(planState.tasks.map(cloneTree),ids,'★');
+  return !!(probe.node&&probe.tasks.some(n=>n.id===probe.node.id));
+}
+// 本次指令：只有落点不在顶层时才给长度要求（和拆解那边「子任务15字以内」一致）
+function buildMergeUserMessage(ids,atTop){
+  const out=[];
+  if(!atTop)out.push('合并后的任务是子任务：任务名15字以内。');
+  out.push('<待合并>');
+  ids.forEach(id=>{
+    const n=findNode(planState,id);if(!n)return;
+    const p=parentNodeOf(planState,id);
+    out.push('- '+n.text+(p?('（所属：'+p.text+'）'):''));
+  });
+  out.push('</待合并>');
+  return out.join('\n');
+}
+// 解析合并结果。多行一律整段失败；成对引号、开头编号、常见前缀这类不改内容的修饰，宽松去掉
+// 返回 {ok:true,title} | {ok:true,none:true} | {ok:false,why}
+function parseMergeReply(reply){
+  const lines=(reply||'').split('\n').map(l=>l.trim()).filter(l=>l.length>0);
+  if(!lines.length)return {ok:false,why:'空回复'};
+  if(lines.length>1)return {ok:false,why:'多于一行'};
+  let t=lines[0];
+  t=t.replace(/^(?:\d+[\.、．\)）]\s*)/,'');                               // 开头编号
+  t=t.replace(/^(?:标题|任务名|合并结果|合并后|结果)\s*[:：]\s*/,'');        // 常见前缀
+  t=t.replace(/^["“「『《'‘](.*)["”」』》'’]$/,'$1').trim();               // 成对引号
+  if(t.replace(/[\s。．.！!，,、"“”'‘’：:]/g,'')==='无法合并')return {ok:true,none:true};
+  if(!t)return {ok:false,why:'去掉修饰后为空'};
+  return {ok:true,title:t};
+}
+
+async function onMergeClick(){
   if(selCount(planState)<2)return;
   if(mergeBlockedIds(planState).length)return;
   const ids=planState.selectedIds.slice();
-  const picked=ids.map(id=>findNode(planState,id)).filter(Boolean).map(n=>n.text);
-  // TODO: 这里接 AI 概括（只要一行标题，结构全部由上面的规则算）；本地先用占位
-  const summary=fakeSummarize(picked);
+  const atTop=mergeLandsAtTop(ids);
+  const btn=document.getElementById('mergeBtn');
+  if(btn){btn.disabled=true;btn.textContent='AI概括中…';}
+  const restore=()=>{if(btn){btn.textContent='合并';updateStartBtnState(planState);}};
+  let reply='';
+  try{
+    const res=await fetch(AI_PROXY_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages:[
+        {role:'system',content:AI_MERGE_PROMPT},
+        {role:'user',content:buildMergeUserMessage(ids,atTop)}
+      ]})
+    });
+    if(!res.ok){
+      const err=await res.json().catch(()=>({}));
+      if(res.status===401||res.status===403)setAiStatus('AI 服务暂不可用，请联系工具作者');
+      else setAiStatus('请求失败：'+(err.error?.message||res.status));
+      restore();return;
+    }
+    const data=await res.json();
+    reply=data.choices?.[0]?.message?.content?.trim()||'';
+  }catch(e){
+    setAiStatus('网络错误，请检查连接');restore();return;
+  }
+  restore();
+  const parsed=parseMergeReply(reply);
+  if(!parsed.ok){setAiStatus('AI 返回格式不对，再试一次');return;}
+  if(parsed.none){setAiStatus('差异太大，无法合并');return;}
   openConfirmTree({
     title:'合并成一条',
     label:'概括结果',
-    tasks:[Object.assign(newNode(summary),{aiTouched:true})],   // 框里只显示一行标题
+    tasks:[Object.assign(newNode(parsed.title),{aiTouched:true})],   // 框里只显示一行标题
     onConfirm:(tasks)=>{
       const t=tasks[0];if(!t)return;
-      const r=computeMerge(planState.tasks,ids,t.text);
+      const live=ids.filter(id=>findNode(planState,id));         // 等待期间被删掉的就不算了
+      if(live.length<2)return;
+      const r=computeMerge(planState.tasks,live,t.text);
       planState.tasks=r.tasks;
       if(r.node)r.node.aiTouched=!!t.aiTouched;   // 框里改过标题 → 算你写的
       setSel(planState,[]);
     }
   });
-}
-// 占位概括：AI 接上之前用，纯粹为了能在本地点通
-function fakeSummarize(texts){
-  const head=(texts[0]||'').replace(/[0-9０-９一二三四五六七八九十]+$/,'').trim();
-  return (head||'合并任务')+'（概括占位，共'+texts.length+'条）';
 }
 
 // ── 点空白处 = 全部取消选中。空白 = 任务行、按钮、输入框、弹窗之外的一切（含列表里的非任务行和页面背景）──
@@ -2192,34 +2257,50 @@ const AI_SYSTEM_PROMPT=`你是一个专注任务拆解助手。用户告诉你�
 
 ## 工作流程
 
-**第一步：判断是否存在行动锚点**
-行动锚点 = 能让用户具体动手去做的事情。纯情绪表达（焦虑、烦、不想动）不是行动锚点；但情绪里裹着的实事是。
-例："我今天要写论文，其实我今天很焦虑，需要做实际的事情，不知道从哪里开始"——只有"写论文"是行动锚点，以它为父任务拆解。
-- 有 → 转第二步
-- 没有 → 整段只输出：无可拆任务
+**第一步：把输入里的每一项归为三种之一**
+- 任务：能让用户具体动手去做的事情（行动锚点）
+- 伴随状态：在等某个外部事件发生（消息、电话、快递、结果公布），有一个可以去看一眼的对象
+- 纯情绪：内在感受（焦虑、烦、不想动），没有可查看的对象，丢掉不用；但情绪里裹着的实事算任务（"好焦虑，论文还没写"里的"写论文"）
+没有任何任务 → 整段只输出：无可拆任务
 
 **第二步：识别任务类型**
-判断每个行动锚点属于哪类任务，按该类型的粒度拆解（见下方粒度示例）：
+判断每项任务属于哪类，按该类型的粒度拆解（见下方粒度示例）：
 学术写作、定理证明/推导、文献调研、读文献/读书、代码开发、数据处理/分析、翻译、修改润色、PPT/汇报、考试备考、背诵记忆、练习（乐器/口语）、运动训练、讨论/会议准备、工作任务、其他。
 
 ## 拆解原则
 
+**类别：决定有几个父任务**
+- 内容上有依赖（一项的产出是另一项的输入），或围绕同一个对象（同一篇论文、同一项研究）的任务是同一类；内容互不相干的是不同类
+- 每一类是一个父任务
+  例："写论文模板，读论文" → 一类；"写论文，做汇报这篇论文进展的组会PPT" → 一类，先写论文再做PPT；
+      "写论文，做汇报别人论文的组会PPT" → 两类；"写论文的实验部分和讨论部分" → 一类
+
+**主次：决定一个父任务内部怎么排**
+- 同一类里以主线为骨架；依附主线的支线，放在主线需要它的位置
+- 标了"顺便""抽空""有空再"这类词的任务是次要任务，不单独成父，不论它属于哪一类
+- 次要任务和伴随状态的管理动作，插进第一个父任务的停顿处，不打断一个完整的专注块，数量远少于主线
+  例："写论文模板，读论文，顺便给老板回复消息，晚点去运动" → 两个父任务：
+      论文（以写模板为主线，读论文接在结构写清之后，给老板回复消息插在一个停顿处）、运动
+
+**伴随状态：不当任务拆，转成管理它的动作**
+- 开始前减少干扰（如关掉消息提醒）；在专注块之间的停顿处安排一次查看（如看一眼有没有消息）
+- 只调节用户自己的注意力，不替用户推动所等的事，例如不要安排"主动联系对方""发消息询问进展"
+  例："等待crush联系但还要全力写完论文模板" → 一个父任务"完成论文模板"：
+      开头关掉消息提醒，然后以写模板为主，在两个写作块之间看一眼消息
+
 **父任务**
-- 父任务是对行动锚点的概括，是具体动作，不是主题
-- 按数量规则把几件事归到同一个父任务下时，父任务可以是概括这几件事的名称
+- 父任务概括这一类的主线，是具体动作；伴随状态和次要任务不写进父任务名
+- 一类里有多项任务，或按数量规则归组时，父任务可以是概括这一类的名称
 
 **子任务**
-- 子任务是父任务的细化，是具体动作，30分钟内可以完成，描述简短直接，15字以内
+- 子任务是具体动作，30分钟内可以完成，描述简短直接，15字以内
 - 同一个父任务下的子任务按执行顺序排列
 
 **数量**
-- 用户没有指定数量时：
-  - 有几件彼此独立的事，就拆成几个父任务；同一件事的不同部分是它的子任务，不要拆成多个父任务
-    例："写论文，顺便把组会PPT做了" → 两个父任务；"写论文的实验部分和讨论部分" → 一个父任务，两部分是它的子任务
-  - 子任务的个数按粒度自行决定
-- 用户指定了数量时，数量指下一层的个数：
-  - 只有一件事：数量是它的子任务个数，<已有子任务> 也算在内
-  - 有两件及以上彼此独立的事：数量是父任务个数；比事项多就按语义补充相关的父任务，比事项少就按语义把相近的事归到同一个父任务下，被归组的事项作为子任务，不再往下拆
+- 用户没有指定数量：父任务个数就是类别个数（次要任务不算）；子任务个数按粒度自行决定
+- 用户指定了数量时以用户为准，数量指下一层的个数：
+  - 输入里只有一项任务：数量是它的子任务个数，<已有子任务> 也算在内
+  - 输入里有两项及以上任务：数量是父任务个数，此时不再按类别和主次合并；比任务项多就按语义补充相关的父任务，比任务项少就按语义把相近的归到同一个父任务下，被归组的任务项作为子任务，不再往下拆
 - 数量这类要求不是任务内容，不要写进任务名
 
 **不要重复**
@@ -2251,8 +2332,30 @@ const AI_SYSTEM_PROMPT=`你是一个专注任务拆解助手。用户告诉你�
 
 - 最多两层，不要出现 1.1.1 这样的三级编号
 - 二级编号的前一段必须和所属父任务一致（2.1 只能跟在 2. 后面）
-- 每一行都必须以编号开头。唯一例外：第一步判定没有行动锚点时，整段只输出"无可拆任务"，不带编号
+- 每一行都必须以编号开头。唯一例外：第一步判定没有任何任务时，整段只输出"无可拆任务"，不带编号
 - 不要输出编号行以外的任何内容：不要开场白、不要解释、不要结尾总结或评价，不要追问`;
+
+// 合并用的系统提示：只起一行标题。结构（落在哪、子女去哪）全部由代码里的七条规则决定，模型看不到那些规则
+const AI_MERGE_PROMPT=`你是一个任务合并助手。用户选中了几条任务，你把它们概括成一条任务。
+
+## 输入说明
+- <待合并> 标签里是被选中的任务，括号里是它所属的父任务，只用来理解语境
+- 标签之外的文字是本次指令
+- 本次指令与以下默认规则冲突时，以本次指令为准
+
+## 概括规则
+- 合并结果是一条具体动作，不是主题或类别名
+  例："画论文的图"+"做PPT的图" → "画论文和PPT的图"，不是"作图工作"
+- 要覆盖所有被选中的任务，不能只取其中一条
+- 编号型或范围型的一串，去掉编号，概括成这一类动作
+  例："画图1""画图2""画图3" → "画数据图表"；"背GRE第3组""背GRE第4组" → "背GRE单词"
+- 括号里的父任务名不要写进合并结果
+- 几条任务差异太大、无法用一个具体动作概括时，整段只输出：无法合并
+
+## 输出格式（严格遵守）
+- 只输出一行，就是合并后的任务名，不带编号、引号、前缀
+- 唯一例外：无法合并时，整段只输出"无法合并"
+- 不要开场白、不要解释、不要追问`;
 
 // AI 拆解作用于统一的 planState + taskInput。
 // aiStatus 那个元素已删，状态提示借用 charCount 那一行显示。
