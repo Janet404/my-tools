@@ -244,7 +244,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
         <div class="end-badge" id="endTimeBadge">30 分钟后</div>
       </div>
       <span class="label-xs">写下你要做的事，一条或一段都行</span>
-      <textarea id="taskInput" placeholder="在对话框中写出你的任务，例：（待填占位）"></textarea>
+      <textarea id="taskInput" placeholder="在对话框中写出你的任务，例：今天要写论文，有点焦虑，不知道从哪开始"></textarea>
 
       <!-- 任务列表折叠面板 -->
       <div id="planTaskPanel" style="display:none;margin-top:10px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
@@ -609,7 +609,7 @@ taskInput.addEventListener('input',()=>{
   if(sole!=null){
     // 选中 1 条：对话框就是它的编辑器，打字实时同步
     const node=findNode(planState,sole);
-    if(node){node.text=taskInput.value;renderTaskList(planState);}
+    if(node){node.text=taskInput.value;node.aiTouched=false;renderTaskList(planState);} // 改了文字就是你写的话，摘掉标记
   } else if(selCount(planState)===0 && taskInput.value.trim().length>0){
     // 什么都没选时打字：同步新增一条父任务，并选中它（之后继续打字走上面那支）
     const node=newNode(taskInput.value);
@@ -1969,7 +1969,10 @@ function buildInlineInput(state,node,depth){
     if(done)return;done=true;
     const text=save?inp.value.trim():original;   // Esc = 还原原文（原本就是空白条则等于放弃）
     state.editingId=null;
-    if(text){node.text=text;}
+    if(text){
+      if(text!==original)node.aiTouched=false;   // 改了文字就是你写的话，摘掉标记（含确认框里的改动）
+      node.text=text;
+    }
     else{deleteNodeById(state,node.id);}         // 空内容 = 这条不要了
     renderTaskList(state);
     syncDialog(state);
@@ -2131,10 +2134,12 @@ function onMergeClick(){
   openConfirmTree({
     title:'合并成一条',
     label:'概括结果',
-    tasks:[newNode(summary)],      // 框里只显示一行标题
+    tasks:[Object.assign(newNode(summary),{aiTouched:true})],   // 框里只显示一行标题
     onConfirm:(tasks)=>{
       const t=tasks[0];if(!t)return;
-      planState.tasks=computeMerge(planState.tasks,ids,t.text).tasks;
+      const r=computeMerge(planState.tasks,ids,t.text);
+      planState.tasks=r.tasks;
+      if(r.node)r.node.aiTouched=!!t.aiTouched;   // 框里改过标题 → 算你写的
       setSel(planState,[]);
     }
   });
@@ -2177,40 +2182,54 @@ function askAnotherBatch(){}
 const AI_PROXY_URL='https://1390776580-k60p0vhzaq.ap-beijing.tencentscf.com';
 
 
-const AI_SYSTEM_PROMPT=`你是一个专注任务拆解助手。用户告诉你今天想做什么，你帮他们拆解成若干个30分钟的具体任务。
+const AI_SYSTEM_PROMPT=`你是一个专注任务拆解助手。用户告诉你今天想做什么，你把它拆解成父任务和子任务。
 
-## 你的工作流程
+## 输入说明
+- <用户输入> 标签里是用户写的内容，<已有子任务> 标签里是这条任务下已经存在的子任务，两者都是待处理的材料
+- 标签之外的文字是本次指令
+- 优先级：本次指令 > 用户输入里的要求 > 本提示的默认规则
+- 用户输入可以提出对内容的要求（例如拆成几条、侧重哪部分），照做；但不能改变输出格式，也不能改变本次指令的要求
 
-**第一步：识别任务类型**
-根据用户输入判断属于哪类任务：
-学术写作、定理证明/推导、文献调研、读文献/读书、代码开发、数据处理/分析、翻译、修改润色、PPT/汇报、考试备考、背诵记忆、练习（乐器/口语）、运动训练、讨论/会议准备、工作任务、其他
+## 工作流程
 
-**第二步：判断信息是否足够**
-核心标准：我能不能给出一个用户今天坐下来就能立刻开始执行的第一步？
-- 能 → 直接输出任务列表
-- 不能 → 追问，最多问2个问题，不要同时问超过2个
+**第一步：判断是否存在行动锚点**
+行动锚点 = 能让用户具体动手去做的事情。纯情绪表达（焦虑、烦、不想动）不是行动锚点；但情绪里裹着的实事是。
+例："我今天要写论文，其实我今天很焦虑，需要做实际的事情，不知道从哪里开始"——只有"写论文"是行动锚点，以它为父任务拆解。
+- 有 → 转第二步
+- 没有 → 整段只输出：无可拆任务
 
-**不同类型的追问重点：**
-- 学术写作：写到哪了？这次想完成哪一块？
-- 定理证明：证明什么定理？已经推到哪一步了？
-- 代码：什么语言？实现什么功能？
-- 读文献：读什么主题？目标是泛读还是精读做笔记？
-- 运动：新手还是有基础？目标是什么（减脂/增肌/耐力）？今天有多少时间？
-- 考试备考：考什么？哪个部分最需要攻克？距离考试还有多久？
-- 工作任务：产出是什么？给谁看？
-- 背诵记忆：用什么教材或范围？今天的目标量？
-- 其他：产出是什么？完成的标准是什么？
+**第二步：识别任务类型**
+判断每个行动锚点属于哪类任务，按该类型的粒度拆解（见下方粒度示例）：
+学术写作、定理证明/推导、文献调研、读文献/读书、代码开发、数据处理/分析、翻译、修改润色、PPT/汇报、考试备考、背诵记忆、练习（乐器/口语）、运动训练、讨论/会议准备、工作任务、其他。
 
 ## 拆解原则
-- 每个任务是一个具体动作，不是一个主题
-- 每个任务30分钟内可以完成
-- 任务之间有顺序逻辑
-- 任务描述简短直接，15字以内
-- 不预判内容数量，把"确认内容范围"本身作为第一个任务
-- 根据任务类型决定粒度，不要套用统一标准
 
-**不同类型的粒度示例：**
-- 学术写作："写引言第一段点明背景"，不是"写引言"
+**父任务**
+- 父任务是对行动锚点的概括，是具体动作，不是主题
+- 按数量规则把几件事归到同一个父任务下时，父任务可以是概括这几件事的名称
+
+**子任务**
+- 子任务是父任务的细化，是具体动作，30分钟内可以完成，描述简短直接，15字以内
+- 同一个父任务下的子任务按执行顺序排列
+
+**数量**
+- 用户没有指定数量时：
+  - 有几件彼此独立的事，就拆成几个父任务；同一件事的不同部分是它的子任务，不要拆成多个父任务
+    例："写论文，顺便把组会PPT做了" → 两个父任务；"写论文的实验部分和讨论部分" → 一个父任务，两部分是它的子任务
+  - 子任务的个数按粒度自行决定
+- 用户指定了数量时，数量指下一层的个数：
+  - 只有一件事：数量是它的子任务个数，<已有子任务> 也算在内
+  - 有两件及以上彼此独立的事：数量是父任务个数；比事项多就按语义补充相关的父任务，比事项少就按语义把相近的事归到同一个父任务下，被归组的事项作为子任务，不再往下拆
+- 数量这类要求不是任务内容，不要写进任务名
+
+**不要重复**
+新拆出的任务之间、以及它们和 <已有子任务> 之间，都不要语义重复：换个说法表达同一件事也算重复。例："书写论文"和"进行论文写作"是同一个任务。
+
+**粒度**
+根据任务类型决定粒度，不要套用统一标准。
+父任务示例："尝试写论文章节"、"站起来开始运动"、"复习期末考试"、"写本周的工作报告"
+子任务示例：
+- 学术写作："写引言第一段点明背景"
 - 定理证明："尝试用反证法推第一步"，不是"证明定理"
 - 代码：根据用户描述的功能判断合理起点，不固定从某个地方开始
 - 读文献："读第二节并用一句话总结核心论点"，不是"读论文"
@@ -2220,21 +2239,20 @@ const AI_SYSTEM_PROMPT=`你是一个专注任务拆解助手。用户告诉你�
 - 背单词："背GRE单词表第3组前50个，过一遍"
 - 工作任务："列出报告的三级提纲"，不是"写报告"
 
-## 输出格式（严格遵守，不能有任何其他内容）
+## 输出格式（严格遵守）
 
-只输出编号行，用编号表示层级：一级编号是父任务，二级编号是它的子任务。
+只输出编号行：一级编号是父任务，二级编号是它的子任务。以下只是格式示意，父任务和子任务的个数按拆解原则决定：
 
 1. [父任务]
 1.1 [子任务]
 1.2 [子任务]
-1.3 [子任务]
+2. [父任务]
+2.1 [子任务]
 
-硬性要求：
-- 最多两层，绝对不要出现 1.1.1 这样的三级编号
-- 有且只有一个一级编号，不要输出 2. 3. 这样的第二个父任务
-- 每一行都必须以编号开头，不要输出任何编号行以外的内容
-- 不要解释，不要寒暄，不要"好的"、"明白了"之类的开场白，不要结尾总结或评价
-- 不要追问，直接给出拆解结果`;
+- 最多两层，不要出现 1.1.1 这样的三级编号
+- 二级编号的前一段必须和所属父任务一致（2.1 只能跟在 2. 后面）
+- 每一行都必须以编号开头。唯一例外：第一步判定没有行动锚点时，整段只输出"无可拆任务"，不带编号
+- 不要输出编号行以外的任何内容：不要开场白、不要解释、不要结尾总结或评价，不要追问`;
 
 // AI 拆解作用于统一的 planState + taskInput。
 // aiStatus 那个元素已删，状态提示借用 charCount 那一行显示。
@@ -2272,123 +2290,133 @@ async function askAI(){
     }
     const data=await res.json();
     const reply=data.choices?.[0]?.message?.content?.trim()||'';
-    handleAiReply(reply,target);
+    handleAiReply(reply,target,mode);
   }catch(e){
     setAiStatus('网络错误，请检查连接');
   }
   btn.disabled=false;btn.textContent='让AI来拆 ✦';
 }
 
-// 2.1 要把原有子树一并喂过去，否则模型会拆出重复的子任务
+// ══════════════ AI 拆解：拼消息 → 解析 → 落地 ══════════════
+// 模式只在发请求前判断一次（看 aiTouched），同一个结果同时交给「拼消息」和「解析 / 落地」，
+// 解析器不从模型输出里反推模式。
+//   2.1（有 aiTouched）：只准一个父，父就是被选中的这条（沿用原名），只往下加子任务；
+//                        已有子任务只作「不要重复」的参考，不贴编号，落地时代码直接保留在前面。
+//   2.2（无 aiTouched）：父名由模型从内容里提炼，可以有多个父；
+//                        已有子任务贴 [旧k]，由模型按语义归到各自的父下。
+// 标签外的文字是「本次指令」，标签里的是材料（系统提示里有对应约定）。
 function buildAiUserMessage(mode,input,target){
-  // 已有的子任务一律喂给模型：它是无状态的，不写进这条消息它就看不见，挡不住重复
-  const kids=target?(target.children||[]).map(c=>'  - '+c.text).join('\n'):'';
-  const kidsBlock=kids?('\n它已有的子任务（新拆的不要和这些重复，换个说法表达同一件事也算重复）：\n'+kids):'';
+  const kids=target?(target.children||[]):[];
+  const out=[];
   if(mode==='2.1'){
-    return '请顺着下面这条任务往下拆一层子任务。\n'+
-      '第一行请照抄原任务名，不要改写。\n任务：'+input+kidsBlock;
+    out.push('请顺着下面这条任务往下拆一层子任务。');
+    out.push('只输出一个父任务，第一行照抄原任务名，不要改写。');
+    if(kids.length)out.push('<已有子任务> 里的子任务会原样保留，不要写进输出，只输出新拆的子任务。');
+  } else {
+    out.push('<用户输入> 里是一段随手写的话，不是任务名。请从中提炼行动锚点作为父任务名（不要只截取其中一句），再拆出子任务。');
+    if(kids.length)out.push('<已有子任务> 里每一条都带 [旧k] 编号：把每一条放到它所属的父任务下，单独占一行二级编号，只写编号引用本身，例：1.1 [旧1]。不要改写它的文字；每一条都必须引用，且只能引用一次。');
   }
-  return '下面这段内容是一段随手写的话，不是任务名。\n'+
-    '请提炼出它的行动锚点作为父任务名（不要只截取其中一句），再拆出子任务。\n内容：'+input+kidsBlock;
+  if(kids.length){
+    out.push('<已有子任务>');
+    kids.forEach((c,i)=>out.push(mode==='2.1'?('- '+c.text):('[旧'+(i+1)+'] '+c.text)));
+    out.push('</已有子任务>');
+  }
+  out.push('<用户输入>');
+  out.push(input);
+  out.push('</用户输入>');
+  return out.join('\n');
 }
 
-// 解析 + 落地。整段失败就什么都不动，让用户重试。
-function handleAiReply(reply,target){
-  const parsed=parseNumberedTree(reply);
-  if(!parsed.ok){
-    setAiStatus('AI 返回格式不对，再试一次');
-    return;
-  }
-  const tree=parsed.node;
-  const newKids=tree.children.slice();      // 模型这次新生成的那几条，只有它们该被打标记
-  // 子任务一律保留：原有的在前、新拆的并在后面，由用户在确认框里取舍。
-  // 2.2 的节点本来就没有子任务，所以这里对它是空操作，不需要分模式。
-  if(target)tree.children=(target.children||[]).concat(tree.children);
-  // 列表空时的初始拆直接落地，不弹框；非空时的 AI 操作都走确认框
-  if(!planState.tasks.length){
-    applyAiTree(target,tree,newKids);
-    return;
-  }
-  openConfirmTree({
-    title:'确认拆解结果',
-    label:'拆解结果',
-    tasks:[tree],
-    onConfirm:(tasks)=>{
-      const t=tasks[0];
-      if(!t)return;
-      applyAiTree(target,t,newKids);
-    }
-  });
-}
-
-// 应用拆解结果到统一列表 planState（这一批：AI 结果作为顶层节点）
-// ══════════════ AI 拆解结果：解析 → 落地 ══════════════
-// 约定的输出：一级编号 = 父，二级编号 = 子，最多两层，且只准一个一级编号。
-// 不容错：出现三级、多个一级、或任何非编号行（开场白 / 总结 / 评价）→ 整段失败。
-// 返回 {ok:true,node} 或 {ok:false,why}
-function parseNumberedTree(reply){
-  const lines=(reply||'').split('\n').map(l=>l.trim()).filter(l=>l.length>0);
+// 解析模型的原始输出。不容错：任何不合约定的行都整段失败。
+// ctx = {mode, oldKids}；oldKids 只在 2.2 时有，顺序和 [旧k] 的编号一一对应。
+// 返回 {ok:true,none:true}（无可拆任务）| {ok:true,roots:[...]} | {ok:false,why}
+function parseAiReply(reply,ctx){
+  const raw=(reply||'').trim();
+  // 信号做宽松匹配：去掉空白和标点再比，模型多写个句号也认得出来
+  if(raw.replace(/[\s。．.！!，,、"“”'‘’：:]/g,'')==='无可拆任务')return {ok:true,none:true};
+  const lines=raw.split('\n').map(l=>l.trim()).filter(l=>l.length>0);
   if(!lines.length)return {ok:false,why:'空回复'};
-  let root=null;
+  const old=ctx.oldKids||[];
+  const used=new Set();
+  const roots=[];let cur=null,curNo=null;
   for(const line of lines){
     const m=line.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?[\.、。\)）]?\s*(.*)$/);
     if(!m)return {ok:false,why:'不是编号行：'+line};
     if(m[3])return {ok:false,why:'出现三级编号：'+line};
     const text=(m[4]||'').trim();
     if(!text)return {ok:false,why:'编号后没有内容：'+line};
-    if(m[2]===undefined){                    // 一级
-      if(root)return {ok:false,why:'出现了多个一级编号'};
-      root=newNode(text);
-    } else {                                  // 二级
-      if(!root)return {ok:false,why:'子任务出现在父任务之前'};
-      root.children.push(newNode(text));
+    if(m[2]===undefined){                              // 一级 = 父
+      if(ctx.mode==='2.1'&&roots.length)return {ok:false,why:'只准一个父任务，却出现了多个'};
+      cur=newNode(text);cur.aiTouched=true;curNo=m[1];
+      roots.push(cur);
+    } else {                                            // 二级 = 子
+      if(!cur)return {ok:false,why:'子任务出现在父任务之前'};
+      if(m[1]!==curNo)return {ok:false,why:'二级编号前缀和所属父任务不一致：'+line};
+      const ref=text.match(/^\[旧(\d+)\]$/);
+      if(ref){
+        const k=parseInt(ref[1],10);
+        if(ctx.mode!=='2.2'||k<1||k>old.length)return {ok:false,why:'引用了不存在的旧子任务：'+line};
+        if(used.has(k))return {ok:false,why:'重复引用旧子任务：'+line};
+        used.add(k);cur.children.push(old[k-1]);       // 原节点（的副本）整个挂过去，不打标记
+      } else {
+        const n=newNode(text);n.aiTouched=true;cur.children.push(n);
+      }
     }
   }
-  if(!root)return {ok:false,why:'没有一级编号'};
-  return {ok:true,node:root};
+  if(!roots.length)return {ok:false,why:'没有一级编号'};
+  if(ctx.mode==='2.2'&&used.size!==old.length)return {ok:false,why:'有旧子任务没有被引用'};
+  return {ok:true,roots};
 }
 
-// 打上「经历过拆解流程」的标记：有标记的下次走 2.1，没标记的走 2.2
-function markAiTouched(node){
-  node.aiTouched=true;
-  (node.children||[]).forEach(markAiTouched);
-}
-// 只给「模型这次新生成的那几条」打标记。标记逐节点独立、不沿树传播，
-// 所以接进来的旧子树（可能是你手动加的）原样不动。
-function markAiTouchedNew(root,newKids){
-  root.aiTouched=true;
-  (newKids||[]).forEach(markAiTouched);
+// 确认框是主树的隔离实例：凡是进框的已有节点一律用副本，
+// 框里怎么改、按〔×〕取消，主列表都不受影响；确认时副本顶回原位（id 不变）。
+function cloneTree(n){return JSON.parse(JSON.stringify(n));}
+
+function handleAiReply(reply,target,mode){
+  const oldKids=target?(target.children||[]).map(cloneTree):[];
+  const parsed=parseAiReply(reply,{mode,oldKids:mode==='2.2'?oldKids:[]});
+  if(!parsed.ok){setAiStatus('AI 返回格式不对，再试一次');return;}
+  if(parsed.none){setAiStatus('无可拆任务，请重新输入');return;}
+  let roots=parsed.roots;
+  let hostId=roots[0].id;                   // 2.2：第一个父任务顶替被选中的这条
+  if(mode==='2.1'){
+    // 父就是被选中的这条：框里显示原名（模型写的那行父名丢弃），旧子任务在前、新拆的在后
+    const shown=newNode(target.text);shown.aiTouched=true;
+    shown.children=oldKids.concat(roots[0].children);
+    roots=[shown];hostId=shown.id;
+  }
+  // 初始拆：列表里除了这次要拆的这一条之外什么都没有（或完全为空）→ 直接落地，不弹框
+  const initial=mode==='2.2'&&(!planState.tasks.length||
+    (target&&planState.tasks.length===1&&planState.tasks[0].id===target.id&&!(target.children&&target.children.length)));
+  if(initial){applyAiResult(target,roots,hostId);return;}
+  openConfirmTree({
+    title:'确认拆解结果',label:'拆解结果',tasks:roots,
+    onConfirm:(tasks)=>applyAiResult(target,tasks,hostId)
+  });
 }
 
-// 把一棵新树替换到目标节点原来的位置（2.1 / 2.2 共用）
-function replaceNodeWith(state,targetId,newTree){
-  const loc=findParentArray(state,targetId);
-  if(!loc)return false;
-  loc[0].splice(loc[1],1,newTree);
-  return true;
-}
-
-// 拆解结果落地。targetId 为 null = 列表原本是空的，直接落到顶层。
-// 这里是「当天任务树定稿」的唯一收口，将来要做跨天历史存档就挂在这一处。
-function applyAiTree(target,tree,newKids){
-  markAiTouchedNew(tree,newKids);
-  let landed=tree;
-  if(target&&findNode(planState,target.id)){
-    if(target.aiTouched){
-      // 2.1：这条留着，只往它底下加子任务。节点对象自始至终是同一个，
-      // 所以反馈、完成状态、id 不需要任何人搬运，天然就在。模型返回的父名丢弃，沿用原名。
-      target.children=tree.children;
-      target.aiTouched=true;
-      landed=target;
-    } else {
-      // 2.2：这条只是一段随手写的话，语义上就该被 AI 起的任务名替换掉。
-      // 这种节点没被专注过，身上不会有反馈，没有东西需要接住。
-      replaceNodeWith(planState,target.id,tree);
-    }
+// 拆解结果落地。这里是「当天任务树定稿」的唯一收口，将来要做跨天历史存档就挂在这一处。
+// 被选中的那条由「宿主」顶回原位，并且沿用原节点对象，所以反馈、完成状态、id 都不会丢：
+//   2.1 的宿主是框里那条原名父任务；2.2 的宿主是第一个父任务（名字换成模型提炼的）。
+// 其余的父任务依次跟在它后面（2.2 一条换多条）。
+function applyAiResult(target,roots,hostId){
+  let first=null;
+  const loc=target?findParentArray(planState,target.id):null;
+  if(loc){
+    const out=roots.map(r=>{
+      if(r.id!==hostId)return r;
+      target.text=r.text;
+      target.children=r.children;
+      target.aiTouched=!!r.aiTouched;       // 框里改过名字 → 算你写的，摘掉标记
+      return target;
+    });
+    loc[0].splice(loc[1],1,...out);
+    first=out[0]||null;
   } else {
-    planState.tasks.unshift(tree);
+    planState.tasks.unshift(...roots);
+    first=roots[0]||null;
   }
-  setSel(planState,[landed.id]);
+  setSel(planState,first?[first.id]:[]);
   planState.editingId=null;
   renderTaskList(planState);
   syncDialog(planState);
